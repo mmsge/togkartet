@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Noregstoget — Live Norwegian Train Map</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/protobufjs@7/dist/protobuf.min.js"></script>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="map"></div>
+
+  <div id="detail-panel">
+    <button id="detail-close" aria-label="Close">&times;</button>
+    <div id="detail-content">
+      <div class="spinner"></div>
+    </div>
+  </div>
+
+  <div id="status-bar">
+    <span id="status-text">Laster…</span>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
