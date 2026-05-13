@@ -277,11 +277,12 @@ function updateMarkers(vehicles) {
     if (trainMarkers[v.id]) {
       trainMarkers[v.id].setLatLng([v.lat, v.lon]);
       trainMarkers[v.id].setIcon(icon);
+      trainMarkers[v.id].setTooltipContent(tooltipText(v));
       trainMarkers[v.id]._vehicleData = v;
     } else {
       const marker = L.marker([v.lat, v.lon], { icon })
         .addTo(map)
-        .bindTooltip(v.tripId || v.id, { direction: 'top', offset: [0, -10] });
+        .bindTooltip(tooltipText(v), { direction: 'top', offset: [0, -10] });
       marker._vehicleData = v;
       marker.on('click', () => onMarkerClick(v.id));
       trainMarkers[v.id] = marker;
@@ -295,6 +296,13 @@ function updateMarkers(vehicles) {
       delete trainMarkers[id];
     }
   }
+}
+
+function tooltipText(v) {
+  const parts = [v.operatorCode !== 'DEFAULT' ? v.operatorCode : ''];
+  if (v.tripId) parts.push(v.tripId.split(':').pop());
+  if (v.speed > 0) parts.push(`${Math.round(v.speed * 3.6)} km/h`);
+  return parts.filter(Boolean).join(' · ');
 }
 
 // ── Status bar ──────────────────────────────────────────────────────────────
@@ -510,6 +518,7 @@ async function onMarkerClick(id) {
 // ── Refresh loop ────────────────────────────────────────────────────────────
 
 async function refresh() {
+  statusText.textContent = (statusText.textContent || 'Laster…').replace(/^Oppdaterer…\s*·?\s*/, '') + ' · Oppdaterer…';
   try {
     const vehicles = await fetchVehiclePositions();
     updateMarkers(vehicles);
@@ -517,7 +526,7 @@ async function refresh() {
   } catch (e) {
     console.error('Refresh error:', e);
     updateStatusBar(Object.keys(trainMarkers).length, true);
-    statusText.textContent = `Feil ved oppdatering: ${e.message} — beholder eksisterende markører`;
+    statusText.textContent = `Feil: ${e.message} — beholder eksisterende markører`;
   }
 }
 
