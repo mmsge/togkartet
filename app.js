@@ -30,7 +30,13 @@ const CONFIG = {
 const trainMarkers = {};
 let selectedId = null;
 let protoRoot = null;
-let useProtobuf = true;
+
+// Route state
+const routeCache    = new Map();   // tripId → { journey, operatorCode, fetchedAt }
+const routePolylines = new Map();  // tripId → { line: L.Polyline, dots: L.LayerGroup }
+let routeFetchQueue = [];
+let routeFetchInProgress = false;
+const ROUTE_CACHE_TTL = 10 * 60 * 1000;
 
 // ── Map initialisation ──────────────────────────────────────────────────────
 
@@ -40,20 +46,21 @@ const map = L.map('map', {
   zoomControl: true,
 });
 
-const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-  maxZoom: 19,
+const lightLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png', {
+  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/">CARTO</a>',
+  subdomains: 'abcd',
+  maxZoom: 20,
 }).addTo(map);
 
-const ormLayer = L.tileLayer('https://{s}.tiles.openrailwaymap.org/standard/{z}/{x}/{y}.png', {
-  attribution: '&copy; <a href="https://www.openrailwaymap.org/">OpenRailwayMap</a>',
-  maxZoom: 19,
-  opacity: 0.7,
+const darkLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_matter_nolabels/{z}/{x}/{y}{r}.png', {
+  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/">CARTO</a>',
+  subdomains: 'abcd',
+  maxZoom: 20,
 });
 
 L.control.layers(
-  { 'OpenStreetMap': osmLayer },
-  { 'Railway overlay': ormLayer },
+  { 'Lyst (klassisk)': lightLayer, 'Mørkt': darkLayer },
+  {},
   { collapsed: false }
 ).addTo(map);
 
@@ -250,19 +257,80 @@ async function fetchSiriVm() {
 
 // ── Fetch vehicle positions (with fallback) ─────────────────────────────────
 
+function isLineRef(id) {
+  return id && /^[A-Z]+:Line:\d+/.test(id);
+}
+
 async function fetchVehiclePositions() {
-  if (useProtobuf && protoRoot) {
+  if (protoRoot) {
     try {
-      const vehicles = await fetchGtfsRt();
-      if (vehicles.length > 0) return vehicles;
-      // Zero results might mean filtering is too strict — still return
-      return vehicles;
+      return await fetchGtfsRt();
     } catch (e) {
-      console.warn('GTFS-RT failed, falling back to SIRI-VM:', e);
-      useProtobuf = false;
+      console.warn('GTFS-RT failed this cycle, falling back to SIRI-VM:', e.message);
     }
   }
   return fetchSiriVm();
+}
+
+// ── Route drawing ───────────────────────────────────────────────────────────
+
+function drawRoute(tripId, journey, operatorCode) {
+  const calls = journey.estimatedCalls || [];
+  const latlngs = calls
+    .map(c => (c.quay?.latitude && c.quay?.longitude) ? [c.quay.latitude, c.quay.longitude] : null)
+    .filter(Boolean);
+  if (latlngs.length < 2) return;
+
+  clearRoute(tripId);
+  const color = CONFIG.operatorColors[operatorCode] || CONFIG.operatorColors.DEFAULT;
+
+  const line = L.polyline(latlngs, {
+    color,
+    weight: 5,
+    opacity: 0.7,
+    lineJoin: 'round',
+    lineCap: 'round',
+    interactive: false,
+  }).addTo(map);
+  line.bringToBack();
+
+  const dots = L.layerGroup();
+  for (const ll of latlngs) {
+    L.circleMarker(ll, {
+      radius: 4,
+      color: '#fff',
+      weight: 1.5,
+      fillColor: color,
+      fillOpacity: 1,
+      interactive: false,
+    }).addTo(dots);
+  }
+  dots.addTo(map);
+  routePolylines.set(tripId, { line, dots });
+}
+
+function clearRoute(tripId) {
+  const r = routePolylines.get(tripId);
+  if (r) { r.line.remove(); r.dots.remove(); routePolylines.delete(tripId); }
+}
+
+async function processRouteFetchQueue() {
+  if (routeFetchInProgress || routeFetchQueue.length === 0) return;
+  routeFetchInProgress = true;
+  const batch = routeFetchQueue.splice(0, 5);
+  await Promise.allSettled(batch.map(async ({ tripId, operatorCode }) => {
+    try {
+      const journey = await fetchJourney(tripId);
+      if (journey) {
+        routeCache.set(tripId, { journey, operatorCode, fetchedAt: Date.now() });
+        drawRoute(tripId, journey, operatorCode);
+      }
+    } catch (e) {
+      console.warn(`Route fetch failed for ${tripId}:`, e.message);
+    }
+  }));
+  routeFetchInProgress = false;
+  if (routeFetchQueue.length > 0) setTimeout(processRouteFetchQueue, 300);
 }
 
 // ── Marker management ───────────────────────────────────────────────────────
@@ -287,6 +355,20 @@ function updateMarkers(vehicles) {
       marker.on('click', () => onMarkerClick(v.id));
       trainMarkers[v.id] = marker;
     }
+
+    // Queue or draw route for this trip
+    if (v.tripId && !isLineRef(v.tripId)) {
+      const cached = routeCache.get(v.tripId);
+      const expired = cached && (Date.now() - cached.fetchedAt > ROUTE_CACHE_TTL);
+      if (cached && !expired) {
+        if (!routePolylines.has(v.tripId)) drawRoute(v.tripId, cached.journey, cached.operatorCode);
+      } else if (!expired) {
+        const already = routeFetchQueue.some(q => q.tripId === v.tripId);
+        if (!already && !routePolylines.has(v.tripId)) {
+          routeFetchQueue.push({ tripId: v.tripId, operatorCode: v.operatorCode });
+        }
+      }
+    }
   }
 
   // Remove stale markers
@@ -296,6 +378,14 @@ function updateMarkers(vehicles) {
       delete trainMarkers[id];
     }
   }
+
+  // Remove polylines for trips no longer active
+  const seenTripIds = new Set(vehicles.map(v => v.tripId).filter(Boolean));
+  for (const tripId of routePolylines.keys()) {
+    if (!seenTripIds.has(tripId)) clearRoute(tripId);
+  }
+
+  processRouteFetchQueue();
 }
 
 function tooltipText(v) {
@@ -449,6 +539,8 @@ query ServiceJourney($id: String!) {
     estimatedCalls {
       quay {
         name
+        latitude
+        longitude
         stopPlace { name }
       }
       aimedArrivalTime
@@ -500,7 +592,18 @@ async function onMarkerClick(id) {
   }
 
   const tripId = vehicleData.tripId || vehicleData.id;
-  console.log('Fetching journey for tripId:', tripId);
+
+  if (isLineRef(tripId)) {
+    const color = CONFIG.operatorColors[vehicleData.operatorCode] || CONFIG.operatorColors.DEFAULT;
+    const lineNum = tripId.split(':').pop();
+    detailContent.innerHTML = `
+      <div class="detail-header">
+        <span class="detail-line-badge" style="background:${color}">${escHtml(lineNum)}</span>
+        <span class="detail-line-name">${escHtml(vehicleData.operatorCode)}</span>
+      </div>
+      <div class="detail-meta">Kun linjeidentifikator tilgjengelig — ingen sanntidsdata for denne turen.</div>`;
+    return;
+  }
 
   try {
     const journey = await fetchJourney(tripId);
@@ -534,10 +637,7 @@ async function refresh() {
 
 (async () => {
   const protoOk = await initProto();
-  if (!protoOk) {
-    useProtobuf = false;
-    console.warn('protobuf unavailable, using SIRI-VM');
-  }
+  if (!protoOk) console.warn('protobuf unavailable, using SIRI-VM');
   await refresh();
   setInterval(refresh, CONFIG.updateIntervalMs);
 })();
