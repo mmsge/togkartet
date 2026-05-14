@@ -8,10 +8,6 @@ const CONFIG = {
   siriVmUrl: 'https://api.entur.io/realtime/v1/rest/vm',
   journeyPlannerUrl: 'https://api.entur.io/journey-planner/v3/graphql',
   updateIntervalMs: 15000,
-  map: {
-    center: [65.0, 15.0],
-    zoom: 5,
-  },
   trainCodespaces: ['VYG', 'SJN', 'GOA', 'GJB', 'FLT', 'RUT', 'NSB'],
   operatorColors: {
     VYG: '#e4032e',
@@ -31,38 +27,28 @@ const trainMarkers = {};
 let selectedId = null;
 let protoRoot = null;
 
-// Route state
-const routeCache    = new Map();   // tripId → { journey, operatorCode, fetchedAt }
-const routePolylines = new Map();  // tripId → { line: L.Polyline, dots: L.LayerGroup }
-let routeFetchQueue = [];
-let routeFetchInProgress = false;
-const ROUTE_CACHE_TTL = 10 * 60 * 1000;
+// Schematic network (loaded from data/network.json at boot).
+let network = null;
+let projectLatLon = (lat, lon) => [lat, lon]; // overwritten once network loads
 
-// ── Map initialisation ──────────────────────────────────────────────────────
+// Cached journey data per tripId, used to place trains on the schematic.
+const journeyCache = new Map(); // tripId → { journey, fetchedAt }
+const JOURNEY_CACHE_TTL = 10 * 60 * 1000;
+let journeyFetchQueue = [];
+let journeyFetchInProgress = false;
+
+// ── Map initialisation (deferred until network.json loads) ──────────────────
 
 const map = L.map('map', {
-  center: CONFIG.map.center,
-  zoom: CONFIG.map.zoom,
+  crs: L.CRS.Simple,
+  center: [0, 0],
+  zoom: 1,
   zoomControl: true,
+  minZoom: -2,
+  maxZoom: 5,
+  zoomDelta: 0.5,
+  zoomSnap: 0.25,
 });
-
-const lightLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png', {
-  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/">CARTO</a>',
-  subdomains: 'abcd',
-  maxZoom: 20,
-}).addTo(map);
-
-const darkLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_matter_nolabels/{z}/{x}/{y}{r}.png', {
-  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/">CARTO</a>',
-  subdomains: 'abcd',
-  maxZoom: 20,
-});
-
-L.control.layers(
-  { 'Lyst (klassisk)': lightLayer, 'Mørkt': darkLayer },
-  {},
-  { collapsed: false }
-).addTo(map);
 
 // ── Train icon ──────────────────────────────────────────────────────────────
 
@@ -98,7 +84,6 @@ function isTrain(id, tripId) {
 
 // ── Protobuf setup ──────────────────────────────────────────────────────────
 
-// Minimal inline GTFS-RT proto schema as a string, loaded synchronously
 const GTFS_RT_PROTO = `
 syntax = "proto2";
 package transit_realtime;
@@ -205,7 +190,6 @@ async function fetchSiriVm() {
       const lineRef = mvj.LineRef?.value || mvj.LineRef || '';
       const id = journeyRef || lineRef || String(Math.random());
       if (!isTrain(id, journeyRef)) {
-        // for SIRI, if mode is rail we include it regardless
         if (mvj.VehicleMode !== 'rail') continue;
       }
       vehicles.push({
@@ -221,7 +205,6 @@ async function fetchSiriVm() {
       });
     }
   } else {
-    // XML path
     const text = await resp.text();
     const parser = new DOMParser();
     const doc = parser.parseFromString(text, 'application/xml');
@@ -255,10 +238,8 @@ async function fetchSiriVm() {
   return vehicles;
 }
 
-// ── Fetch vehicle positions (with fallback) ─────────────────────────────────
-
 function isLineRef(id) {
-  return id && /^[A-Z]+:Line:\d+/.test(id);
+  return id && /^[A-Z]+:Line:/.test(id);
 }
 
 async function fetchVehiclePositions() {
@@ -272,65 +253,272 @@ async function fetchVehiclePositions() {
   return fetchSiriVm();
 }
 
-// ── Route drawing ───────────────────────────────────────────────────────────
+// ── Schematic network rendering ─────────────────────────────────────────────
 
-function drawRoute(tripId, journey, operatorCode) {
-  const calls = journey.estimatedCalls || [];
-  const latlngs = calls
-    .map(c => (c.quay?.latitude && c.quay?.longitude) ? [c.quay.latitude, c.quay.longitude] : null)
-    .filter(Boolean);
-  if (latlngs.length < 2) return;
+const networkLayer = L.layerGroup();
+const stationLayer = L.layerGroup();
+const labelLayer = L.layerGroup();
 
-  clearRoute(tripId);
-  const color = CONFIG.operatorColors[operatorCode] || CONFIG.operatorColors.DEFAULT;
+async function loadNetwork() {
+  const netResp = await fetch('data/network.json');
+  network = await netResp.json();
 
-  const line = L.polyline(latlngs, {
-    color,
-    weight: 5,
-    opacity: 0.7,
-    lineJoin: 'round',
-    lineCap: 'round',
-    interactive: false,
-  }).addTo(map);
-  line.bringToBack();
-
-  const dots = L.layerGroup();
-  for (const ll of latlngs) {
-    L.circleMarker(ll, {
-      radius: 4,
-      color: '#fff',
-      weight: 1.5,
-      fillColor: color,
-      fillOpacity: 1,
-      interactive: false,
-    }).addTo(dots);
-  }
-  dots.addTo(map);
-  routePolylines.set(tripId, { line, dots });
-}
-
-function clearRoute(tripId) {
-  const r = routePolylines.get(tripId);
-  if (r) { r.line.remove(); r.dots.remove(); routePolylines.delete(tripId); }
-}
-
-async function processRouteFetchQueue() {
-  if (routeFetchInProgress || routeFetchQueue.length === 0) return;
-  routeFetchInProgress = true;
-  const batch = routeFetchQueue.splice(0, 5);
-  await Promise.allSettled(batch.map(async ({ tripId, operatorCode }) => {
-    try {
-      const journey = await fetchJourney(tripId);
-      if (journey) {
-        routeCache.set(tripId, { journey, operatorCode, fetchedAt: Date.now() });
-        drawRoute(tripId, journey, operatorCode);
-      }
-    } catch (e) {
-      console.warn(`Route fetch failed for ${tripId}:`, e.message);
+  // Build a serviceLineId → schematic line map for live train placement.
+  network.serviceLineIndex = {};
+  for (const ln of network.lines) {
+    for (const sid of (ln.serviceLineIds || [])) {
+      network.serviceLineIndex[sid] = ln;
     }
-  }));
-  routeFetchInProgress = false;
-  if (routeFetchQueue.length > 0) setTimeout(processRouteFetchQueue, 300);
+  }
+
+  // Fit the map to the network bounds. animate:false snaps us straight to
+  // the final zoom so polylines we add immediately afterwards project to
+  // the right pixels (with an animated transition Leaflet does not
+  // reproject paths added mid-flight).
+  const { minX, minY, maxX, maxY } = network.bounds;
+  const bounds = L.latLngBounds([minY, minX], [maxY, maxX]);
+  map.fitBounds(bounds, { animate: false, padding: [10, 10] });
+  map.setMaxBounds(bounds.pad(0.4));
+
+  drawNetwork();
+}
+
+// Track which Leaflet objects each station / line owns so we can toggle
+// visibility per zoom level without redrawing everything.
+const linePolylines = []; // [{ tier, polyline }]
+const stationDots = [];   // [{ stationId, marker, isTerminal, isInterchange, tiers }]
+const stationLabels = []; // [{ stationId, marker, isTerminal, isInterchange, tiers }]
+
+function drawNetwork() {
+  networkLayer.clearLayers();
+  stationLayer.clearLayers();
+  labelLayer.clearLayers();
+  linePolylines.length = 0;
+  stationDots.length = 0;
+  stationLabels.length = 0;
+
+  // Track tiers per station for visibility decisions, and detect terminals.
+  const stationTiers = new Map();
+  const terminals = new Set();
+  for (const ln of network.lines) {
+    if (ln.stations.length === 0) continue;
+    terminals.add(ln.stations[0]);
+    terminals.add(ln.stations[ln.stations.length - 1]);
+    for (const id of ln.stations) {
+      if (!stationTiers.has(id)) stationTiers.set(id, new Set());
+      stationTiers.get(id).add(ln.tier || 'regional');
+    }
+  }
+
+  // Each line carries an explicit polyline (with bend points where lines
+  // change direction) plus an optional dashed off-map continuation. We use
+  // the polyline geometry verbatim — the layout was hand-authored to match
+  // the user's reference SVG so we preserve every diagonal and corner.
+  for (const ln of network.lines) {
+    const poly = (ln.polyline || []).map(p => [p.y, p.x]);
+    if (poly.length >= 2) {
+      const polyline = L.polyline(poly, {
+        color: ln.color,
+        weight: 6,
+        opacity: 1,
+        lineJoin: 'round',
+        lineCap: 'round',
+        interactive: false,
+      });
+      polyline.addTo(networkLayer);
+      linePolylines.push({ tier: ln.tier || 'regional', polyline });
+    }
+    if (ln.dashed && ln.dashed.length >= 2) {
+      const dashed = L.polyline(ln.dashed.map(p => [p.y, p.x]), {
+        color: ln.color,
+        weight: 6,
+        opacity: 1,
+        dashArray: '6 6',
+        lineCap: 'butt',
+        interactive: false,
+      });
+      dashed.addTo(networkLayer);
+      linePolylines.push({ tier: ln.tier || 'regional', polyline: dashed });
+    }
+  }
+  networkLayer.addTo(map);
+
+  // Station dots + labels. Several Entur IDs alias to the same physical
+  // station (Bodø, Fauske, Trondheim) — collapse those so we draw one dot
+  // and one label per visible station.
+  const drawn = new Set();
+  for (const [id, s] of Object.entries(network.stations)) {
+    const key = `${s.x},${s.y}`;
+    if (drawn.has(key)) continue;
+    drawn.add(key);
+
+    const tiers = stationTiers.get(id) || new Set();
+    const dot = L.marker([s.y, s.x], {
+      icon: L.divIcon({
+        className: 'station-dot',
+        html: '',
+        iconSize: [12, 12],
+        iconAnchor: [6, 6],
+      }),
+      interactive: false,
+      keyboard: false,
+    });
+    dot.addTo(stationLayer);
+
+    const label = L.marker([s.y, s.x], {
+      icon: L.divIcon({
+        className: 'station-label',
+        html: `<span>${escHtml(s.name)}</span>`,
+        iconSize: [0, 0],
+        iconAnchor: [0, 0],
+      }),
+      interactive: false,
+      keyboard: false,
+    });
+    label.addTo(labelLayer);
+
+    const entry = {
+      stationId: id,
+      marker: dot,
+      labelMarker: label,
+      isTerminal: terminals.has(id),
+      isInterchange: !!s.interchange,
+      tiers,
+      nonCommuter: [...tiers].some(t => t !== 'commuter'),
+    };
+    stationDots.push(entry);
+    stationLabels.push(entry);
+  }
+  stationLayer.addTo(map);
+  labelLayer.addTo(map);
+  // After fitBounds settles, Leaflet only reprojects polylines added during
+  // its zoom animation when something fires `viewreset`. Hook it.
+  const repaint = () => { for (const { polyline } of linePolylines) polyline.redraw(); };
+  map.whenReady(repaint);
+  map.once('moveend zoomend', repaint);
+  setTimeout(repaint, 50);
+  setTimeout(updateVisibility, 0);
+}
+
+// With only 33 hand-picked stations the network is sparse enough that every
+// label can be visible at every zoom level — no tier-based hiding needed.
+function updateVisibility() {
+  // Everything stays visible. Function kept so map.on('zoomend') still has
+  // a callback wired up (currently a no-op, but room to grow).
+
+  // Toggle labels. At overview: nothing. At major: only terminals +
+  // interchanges that survive the commuter filter. At all: everything
+  // visible.
+  for (const entry of stationLabels) {
+    const stationVisible = entry.nonCommuter || showCommuter;
+    let visible = false;
+    if (stationVisible) {
+      if (showAllLabels) visible = true;
+      else if (showMajorLabels) visible = entry.isTerminal || entry.isInterchange;
+    }
+    const el = entry.labelMarker.getElement();
+    if (el) el.style.display = visible ? '' : 'none';
+  }
+}
+map.on('zoomend', updateVisibility);
+map.on('moveend', updateVisibility);
+
+// ── Light / dark toggle ─────────────────────────────────────────────────────
+
+const themeToggle = document.createElement('button');
+themeToggle.id = 'theme-toggle';
+themeToggle.textContent = '◐';
+themeToggle.title = 'Bytt mellom lyst og mørkt';
+themeToggle.addEventListener('click', () => {
+  document.body.classList.toggle('dark');
+});
+document.body.appendChild(themeToggle);
+
+// ── Train placement on schematic ────────────────────────────────────────────
+//
+// Strategy: each schematic line lists `serviceLineIds` (Entur line IDs that
+// it represents). For a given train:
+//   1. find its journey's Entur line ID
+//   2. look up the schematic line that hosts that service
+//   3. walk the journey's stops to find the two CURATED schematic stops the
+//      train is currently between (skipping intermediate stops not in the
+//      schematic, e.g. Brumunddal on Dovrebanen)
+//   4. interpolate position between them by time
+//
+// Trains on service lines we don't represent (Trønderbanen, Meråkerbanen,
+// Flytoget, Oslo commuter L1/L2 outside the long-distance corridors) return
+// null so the caller hides them — keeps the schematic clean.
+
+function placeOnSchematic(journey) {
+  if (!network) return null;
+  const calls = journey.estimatedCalls || [];
+  if (calls.length < 2) return null;
+
+  const serviceLineId = journey.line?.id;
+  let schemLine = serviceLineId ? network.serviceLineIndex[serviceLineId] : null;
+
+  // GOA:Line:53 ("Sørtoget lokal") serves both Sørlandsbanen and the
+  // Arendalsbanen branch depending on the run. Disambiguate by checking
+  // whether Arendal is on the journey.
+  if (schemLine && schemLine.id === 'sorlandsbanen' && calls.some(c => c.quay?.stopPlace?.id === 'NSR:StopPlace:380')) {
+    schemLine = network.serviceLineIndex['GOA:Line:53:arendal']
+      || network.lines.find(l => l.id === 'arendalsbanen')
+      || schemLine;
+  }
+
+  if (!schemLine) return null;
+
+  // Locate the next journey call that's still in the future (or the last
+  // call if the journey is already complete).
+  const now = Date.now();
+  let nextJourneyIdx = -1;
+  for (let i = 0; i < calls.length; i++) {
+    const ref = calls[i].expectedArrivalTime || calls[i].aimedArrivalTime
+             || calls[i].expectedDepartureTime || calls[i].aimedDepartureTime;
+    if (ref && new Date(ref).getTime() > now) { nextJourneyIdx = i; break; }
+  }
+  if (nextJourneyIdx === -1) nextJourneyIdx = calls.length - 1;
+
+  // Step backward from nextJourneyIdx looking for a journey stop whose
+  // stopPlace.id is part of this schematic line; step forward for the next.
+  const schemStops = new Set(schemLine.stations);
+  function findSchematicStop(startIdx, dir) {
+    for (let i = startIdx; i >= 0 && i < calls.length; i += dir) {
+      const id = calls[i].quay?.stopPlace?.id;
+      if (id && schemStops.has(id)) return { idx: i, id };
+    }
+    return null;
+  }
+  const prev = findSchematicStop(nextJourneyIdx - 1, -1)
+            || findSchematicStop(0, +1);
+  const next = findSchematicStop(nextJourneyIdx, +1)
+            || findSchematicStop(calls.length - 1, -1);
+
+  if (!prev && !next) return null;
+  const A = prev && network.stations[prev.id];
+  const B = next && network.stations[next.id];
+  if (!A && !B) return null;
+  if (!A || prev.idx === next?.idx) return { y: B.y, x: B.x, bearing: 0 };
+  if (!B) return { y: A.y, x: A.x, bearing: 0 };
+
+  // Time interpolation: where is the train along the prev→next segment?
+  const prevDep = new Date(
+    calls[prev.idx].expectedDepartureTime || calls[prev.idx].aimedDepartureTime
+    || calls[prev.idx].expectedArrivalTime || calls[prev.idx].aimedArrivalTime
+  ).getTime();
+  const nextArr = new Date(
+    calls[next.idx].expectedArrivalTime || calls[next.idx].aimedArrivalTime
+    || calls[next.idx].expectedDepartureTime || calls[next.idx].aimedDepartureTime
+  ).getTime();
+  let t = (now - prevDep) / Math.max(1, nextArr - prevDep);
+  if (!isFinite(t)) t = 0.5;
+  t = Math.max(0, Math.min(1, t));
+
+  const y = A.y + t * (B.y - A.y);
+  const x = A.x + t * (B.x - A.x);
+  const dy = B.y - A.y, dx = B.x - A.x;
+  const bearing = (Math.atan2(dx, dy) * 180 / Math.PI + 360) % 360;
+  return { y, x, bearing };
 }
 
 // ── Marker management ───────────────────────────────────────────────────────
@@ -340,38 +528,47 @@ function updateMarkers(vehicles) {
 
   for (const v of vehicles) {
     seen.add(v.id);
-    const icon = createTrainIcon(v.operatorCode, v.bearing);
 
-    if (trainMarkers[v.id]) {
-      trainMarkers[v.id].setLatLng([v.lat, v.lon]);
-      trainMarkers[v.id].setIcon(icon);
-      trainMarkers[v.id].setTooltipContent(tooltipText(v));
-      trainMarkers[v.id]._vehicleData = v;
-    } else {
-      const marker = L.marker([v.lat, v.lon], { icon })
-        .addTo(map)
-        .bindTooltip(tooltipText(v), { direction: 'top', offset: [0, -10] });
-      marker._vehicleData = v;
-      marker.on('click', () => onMarkerClick(v.id));
-      trainMarkers[v.id] = marker;
+    // Only render trains we can place on the schematic. Anything else
+    // (services we don't draw, or before we've fetched the journey) is
+    // queued and skipped so we don't litter the map with off-network dots.
+    const cached = v.tripId && journeyCache.get(v.tripId);
+    let placed = null;
+    if (cached && cached.journey) placed = placeOnSchematic(cached.journey);
+
+    if (placed) {
+      const pos = [placed.y, placed.x];
+      const icon = createTrainIcon(v.operatorCode, placed.bearing);
+      if (trainMarkers[v.id]) {
+        trainMarkers[v.id].setLatLng(pos);
+        trainMarkers[v.id].setIcon(icon);
+        trainMarkers[v.id].setTooltipContent(tooltipText(v));
+        trainMarkers[v.id]._vehicleData = v;
+      } else {
+        const marker = L.marker(pos, { icon })
+          .addTo(map)
+          .bindTooltip(tooltipText(v), { direction: 'top', offset: [0, -10] });
+        marker._vehicleData = v;
+        marker.on('click', () => onMarkerClick(v.id));
+        trainMarkers[v.id] = marker;
+      }
+    } else if (trainMarkers[v.id]) {
+      // Was on the schematic, isn't placeable now — remove until we can
+      // resolve a journey for it.
+      trainMarkers[v.id].remove();
+      delete trainMarkers[v.id];
     }
 
-    // Queue or draw route for this trip
+    // Queue journey fetch if we don't have it yet (so the next refresh can
+    // place the train on the schematic).
     if (v.tripId && !isLineRef(v.tripId)) {
-      const cached = routeCache.get(v.tripId);
-      const expired = cached && (Date.now() - cached.fetchedAt > ROUTE_CACHE_TTL);
-      if (cached && !expired) {
-        if (!routePolylines.has(v.tripId)) drawRoute(v.tripId, cached.journey, cached.operatorCode);
-      } else if (!expired) {
-        const already = routeFetchQueue.some(q => q.tripId === v.tripId);
-        if (!already && !routePolylines.has(v.tripId)) {
-          routeFetchQueue.push({ tripId: v.tripId, operatorCode: v.operatorCode });
-        }
+      const fresh = cached && (Date.now() - cached.fetchedAt < JOURNEY_CACHE_TTL);
+      if (!fresh && !journeyFetchQueue.some(q => q.tripId === v.tripId)) {
+        journeyFetchQueue.push({ tripId: v.tripId });
       }
     }
   }
 
-  // Remove stale markers
   for (const id of Object.keys(trainMarkers)) {
     if (!seen.has(id)) {
       trainMarkers[id].remove();
@@ -379,13 +576,23 @@ function updateMarkers(vehicles) {
     }
   }
 
-  // Remove polylines for trips no longer active
-  const seenTripIds = new Set(vehicles.map(v => v.tripId).filter(Boolean));
-  for (const tripId of routePolylines.keys()) {
-    if (!seenTripIds.has(tripId)) clearRoute(tripId);
-  }
+  processJourneyFetchQueue();
+}
 
-  processRouteFetchQueue();
+async function processJourneyFetchQueue() {
+  if (journeyFetchInProgress || journeyFetchQueue.length === 0) return;
+  journeyFetchInProgress = true;
+  const batch = journeyFetchQueue.splice(0, 5);
+  await Promise.allSettled(batch.map(async ({ tripId }) => {
+    try {
+      const journey = await fetchJourney(tripId);
+      if (journey) journeyCache.set(tripId, { journey, fetchedAt: Date.now() });
+    } catch (e) {
+      console.warn(`Journey fetch failed for ${tripId}:`, e.message);
+    }
+  }));
+  journeyFetchInProgress = false;
+  if (journeyFetchQueue.length > 0) setTimeout(processJourneyFetchQueue, 300);
 }
 
 function tooltipText(v) {
@@ -414,18 +621,9 @@ const detailClose = document.getElementById('detail-close');
 
 detailClose.addEventListener('click', closePanel);
 
-function openPanel() {
-  detailPanel.classList.add('open');
-}
-
-function closePanel() {
-  detailPanel.classList.remove('open');
-  selectedId = null;
-}
-
-function showSpinner() {
-  detailContent.innerHTML = '<div class="spinner"></div>';
-}
+function openPanel() { detailPanel.classList.add('open'); }
+function closePanel() { detailPanel.classList.remove('open'); selectedId = null; }
+function showSpinner() { detailContent.innerHTML = '<div class="spinner"></div>'; }
 
 function fmt(isoStr) {
   if (!isoStr) return '--:--';
@@ -448,15 +646,11 @@ function renderJourney(journey, vehicleData) {
 
   const color = CONFIG.operatorColors[vehicleData.operatorCode] || CONFIG.operatorColors.DEFAULT;
 
-  // Determine next stop
   const now = Date.now();
   let nextIdx = -1;
   for (let i = 0; i < calls.length; i++) {
     const dept = calls[i].expectedDepartureTime || calls[i].aimedDepartureTime;
-    if (dept && new Date(dept).getTime() > now) {
-      nextIdx = i;
-      break;
-    }
+    if (dept && new Date(dept).getTime() > now) { nextIdx = i; break; }
   }
 
   const direction = calls.length > 0 ? (calls[calls.length - 1].quay?.stopPlace?.name || calls[calls.length - 1].quay?.name || '—') : '—';
@@ -469,17 +663,12 @@ function renderJourney(journey, vehicleData) {
     const timeStr = fmt(actual || expected || aimed);
     const delay = delayMinutes(aimed, expected);
     const isNext = i === nextIdx;
-    const isPassed = nextIdx >= 0 ? i < nextIdx : (actual != null);
-
     let classes = 'stop-item';
     if (isNext) classes += ' next-stop';
-
     let delayHtml = '';
     if (delay > 1) delayHtml = `<span class="stop-delay">+${delay} min</span>`;
-
     let nameHtml = `<span class="stop-name">${escHtml(stopName)}</span>`;
     if (call.cancellation) nameHtml = `<span class="stop-name stop-cancelled">${escHtml(stopName)} (innstilt)</span>`;
-
     return `<li class="${classes}">
       <span class="stop-time">${timeStr}</span>
       ${nameHtml}
@@ -487,7 +676,6 @@ function renderJourney(journey, vehicleData) {
     </li>`;
   });
 
-  // Split into upcoming and passed
   const passedItems = nextIdx > 0 ? stopItems.slice(0, nextIdx) : (nextIdx === -1 ? stopItems : []);
   const upcomingItems = nextIdx >= 0 ? stopItems.slice(nextIdx) : [];
 
@@ -541,7 +729,7 @@ query ServiceJourney($id: String!) {
         name
         latitude
         longitude
-        stopPlace { name }
+        stopPlace { id name }
       }
       aimedArrivalTime
       expectedArrivalTime
@@ -556,9 +744,7 @@ query ServiceJourney($id: String!) {
 `;
 
 async function fetchJourney(tripId) {
-  // Try the raw tripId, and also strip any date suffix if present
   const ids = [tripId];
-  // If tripId has a date suffix like _2025-05-13 or -2025-05-13, try without
   const stripped = tripId.replace(/[_-]\d{4}-\d{2}-\d{2}$/, '');
   if (stripped !== tripId) ids.push(stripped);
 
@@ -606,11 +792,13 @@ async function onMarkerClick(id) {
   }
 
   try {
-    const journey = await fetchJourney(tripId);
+    const cached = journeyCache.get(tripId);
+    const journey = cached?.journey || await fetchJourney(tripId);
     if (!journey) {
       detailContent.innerHTML = `<div class="detail-error">Fant ikke reiseinformasjon for<br><code>${escHtml(tripId)}</code></div>`;
       return;
     }
+    if (!cached) journeyCache.set(tripId, { journey, fetchedAt: Date.now() });
     renderJourney(journey, vehicleData);
   } catch (e) {
     console.error('Journey fetch error:', e);
@@ -621,7 +809,6 @@ async function onMarkerClick(id) {
 // ── Refresh loop ────────────────────────────────────────────────────────────
 
 async function refresh() {
-  statusText.textContent = (statusText.textContent || 'Laster…').replace(/^Oppdaterer…\s*·?\s*/, '') + ' · Oppdaterer…';
   try {
     const vehicles = await fetchVehiclePositions();
     updateMarkers(vehicles);
@@ -636,6 +823,7 @@ async function refresh() {
 // ── Boot ────────────────────────────────────────────────────────────────────
 
 (async () => {
+  await loadNetwork();
   const protoOk = await initProto();
   if (!protoOk) console.warn('protobuf unavailable, using SIRI-VM');
   await refresh();
