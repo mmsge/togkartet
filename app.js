@@ -114,7 +114,8 @@ message Position {
   required float latitude = 1;
   required float longitude = 2;
   optional float bearing = 3;
-  optional float speed = 4;
+  optional double odometer = 4;
+  optional float speed = 5;
 }
 `;
 
@@ -397,31 +398,7 @@ function drawNetwork() {
   map.whenReady(repaint);
   map.once('moveend zoomend', repaint);
   setTimeout(repaint, 50);
-  setTimeout(updateVisibility, 0);
 }
-
-// With only 33 hand-picked stations the network is sparse enough that every
-// label can be visible at every zoom level — no tier-based hiding needed.
-function updateVisibility() {
-  // Everything stays visible. Function kept so map.on('zoomend') still has
-  // a callback wired up (currently a no-op, but room to grow).
-
-  // Toggle labels. At overview: nothing. At major: only terminals +
-  // interchanges that survive the commuter filter. At all: everything
-  // visible.
-  for (const entry of stationLabels) {
-    const stationVisible = entry.nonCommuter || showCommuter;
-    let visible = false;
-    if (stationVisible) {
-      if (showAllLabels) visible = true;
-      else if (showMajorLabels) visible = entry.isTerminal || entry.isInterchange;
-    }
-    const el = entry.labelMarker.getElement();
-    if (el) el.style.display = visible ? '' : 'none';
-  }
-}
-map.on('zoomend', updateVisibility);
-map.on('moveend', updateVisibility);
 
 // ── Light / dark toggle ─────────────────────────────────────────────────────
 
@@ -523,8 +500,16 @@ function placeOnSchematic(journey) {
 
 // ── Marker management ───────────────────────────────────────────────────────
 
+// Session-level dedupe so we only log each unmapped line ID once per page load.
+const reportedUnmappedLines = new Set();
+
 function updateMarkers(vehicles) {
   const seen = new Set();
+  let placedCount = 0;
+  let awaitingJourney = 0;
+  let unmappedLineCount = 0;
+  let unplaceable = 0;
+  const cycleUnmappedLines = new Set();
 
   for (const v of vehicles) {
     seen.add(v.id);
@@ -537,6 +522,7 @@ function updateMarkers(vehicles) {
     if (cached && cached.journey) placed = placeOnSchematic(cached.journey);
 
     if (placed) {
+      placedCount++;
       const pos = [placed.y, placed.x];
       const icon = createTrainIcon(v.operatorCode, placed.bearing);
       if (trainMarkers[v.id]) {
@@ -552,11 +538,24 @@ function updateMarkers(vehicles) {
         marker.on('click', () => onMarkerClick(v.id));
         trainMarkers[v.id] = marker;
       }
-    } else if (trainMarkers[v.id]) {
-      // Was on the schematic, isn't placeable now — remove until we can
-      // resolve a journey for it.
-      trainMarkers[v.id].remove();
-      delete trainMarkers[v.id];
+    } else {
+      if (!cached || !cached.journey) {
+        awaitingJourney++;
+      } else {
+        const lineId = cached.journey.line?.id;
+        if (lineId && network && !network.serviceLineIndex[lineId]) {
+          unmappedLineCount++;
+          cycleUnmappedLines.add(lineId);
+        } else {
+          unplaceable++;
+        }
+      }
+      if (trainMarkers[v.id]) {
+        // Was on the schematic, isn't placeable now — remove until we can
+        // resolve a journey for it.
+        trainMarkers[v.id].remove();
+        delete trainMarkers[v.id];
+      }
     }
 
     // Queue journey fetch if we don't have it yet (so the next refresh can
@@ -576,7 +575,15 @@ function updateMarkers(vehicles) {
     }
   }
 
+  const newlyUnmapped = [...cycleUnmappedLines].filter(id => !reportedUnmappedLines.has(id));
+  if (newlyUnmapped.length > 0) {
+    for (const id of newlyUnmapped) reportedUnmappedLines.add(id);
+    console.info('Trains on lines not in the schematic:', newlyUnmapped);
+  }
+
   processJourneyFetchQueue();
+
+  return { total: vehicles.length, placed: placedCount, awaitingJourney, unmappedLine: unmappedLineCount, unplaceable };
 }
 
 async function processJourneyFetchQueue() {
@@ -607,9 +614,10 @@ function tooltipText(v) {
 const statusBar = document.getElementById('status-bar');
 const statusText = document.getElementById('status-text');
 
-function updateStatusBar(count, warning) {
+function updateStatusBar(stats, warning) {
   const now = new Date().toLocaleTimeString('nb-NO', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-  statusText.textContent = `Sist oppdatert: ${now} · ${count} tog`;
+  const { total = 0, placed = 0 } = stats || {};
+  statusText.textContent = `Sist oppdatert: ${now} · ${placed}/${total} tog på skjematisk`;
   statusBar.classList.toggle('warning', !!warning);
 }
 
@@ -718,6 +726,7 @@ query ServiceJourney($id: String!) {
   serviceJourney(id: $id) {
     id
     line {
+      id
       publicCode
       name
       operator { name }
@@ -811,11 +820,12 @@ async function onMarkerClick(id) {
 async function refresh() {
   try {
     const vehicles = await fetchVehiclePositions();
-    updateMarkers(vehicles);
-    updateStatusBar(vehicles.length, false);
+    const stats = updateMarkers(vehicles);
+    updateStatusBar(stats, false);
   } catch (e) {
     console.error('Refresh error:', e);
-    updateStatusBar(Object.keys(trainMarkers).length, true);
+    const placed = Object.keys(trainMarkers).length;
+    updateStatusBar({ total: placed, placed }, true);
     statusText.textContent = `Feil: ${e.message} — beholder eksisterende markører`;
   }
 }
