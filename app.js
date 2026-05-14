@@ -1077,6 +1077,14 @@ function parseAndApplyHash() {
       }
     } else if (type === 'train') {
       pendingTripId = id;
+      for (const [markerId, marker] of Object.entries(trainMarkers)) {
+        const vData = marker._vehicleData;
+        if (vData && vData.tripId === id) {
+          onMarkerClick(markerId);
+          pendingTripId = null;
+          break;
+        }
+      }
     }
   } catch (e) {
     console.warn('Failed to parse hash:', e);
@@ -1084,10 +1092,12 @@ function parseAndApplyHash() {
 }
 
 function onHashChange() {
-  if (location.hash.startsWith('#train/')) return;
-  if (location.hash.startsWith('#station/')) return;
-  closePanel();
-  closeStationPopup();
+  if (location.hash.startsWith('#train/') || location.hash.startsWith('#station/')) {
+    parseAndApplyHash();
+  } else {
+    closePanel();
+    closeStationPopup();
+  }
 }
 
 // ── Boot ────────────────────────────────────────────────────────────────────
