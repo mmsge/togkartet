@@ -19,6 +19,22 @@
     </div>
   </div>
 
+  <div id="station-popup" hidden>
+    <div id="station-popup-header">
+      <span id="station-popup-name"></span>
+      <button id="station-popup-close" aria-label="Lukk">&times;</button>
+    </div>
+    <div id="station-popup-tabs">
+      <button class="sp-tab active" data-view="departure">Avganger</button>
+      <button class="sp-tab" data-view="arrival">Ankomst</button>
+      <button class="sp-tab" data-view="track">Spor</button>
+    </div>
+    <div id="station-popup-track-row" hidden>
+      Spor: <input id="station-popup-track-input" type="text" placeholder="f.eks. 1" size="4">
+    </div>
+    <div id="station-popup-board"></div>
+  </div>
+
   <div id="status-bar">
     <span id="status-text">Laster…</span>
   </div>
