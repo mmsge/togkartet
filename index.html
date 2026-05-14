@@ -3,11 +3,71 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <!-- ── Standard meta ─────────────────────────────────────────── -->
+  <meta name="description"
+    content="Noregstoget viser togposisjonar i sanntid på eit skjematisk kart over det norske jernbanenettet — 26 linjer, ~280 stasjonar. Live Norwegian train map with real-time positions, departure boards and delay info." />
+  <link rel="canonical" href="https://togkartet.msge.no/" />
+  <meta name="theme-color" content="#1a1a1a" />
+  <meta name="robots" content="index, follow" />
+
+  <!-- ── Open Graph ───────────────────────────────────────────── -->
+  <meta property="og:type"        content="website" />
+  <meta property="og:url"         content="https://togkartet.msge.no/" />
+  <meta property="og:site_name"   content="Noregstoget" />
+  <meta property="og:locale"      content="nb_NO" />
+  <meta property="og:title"       content="Noregstoget — Live Norwegian Train Map" />
+  <meta property="og:description"
+    content="Sanntids togposisjonar på eit skjematisk kart over Noreg. 26 jernbaneliner, ~280 stasjonar. Avgangstavler og forseinkingsinformasjon." />
+  <meta property="og:image"       content="https://togkartet.msge.no/og-image.png" />
+
+  <!-- ── Twitter Card ─────────────────────────────────────────── -->
+  <meta name="twitter:card"        content="summary_large_image" />
+  <meta name="twitter:title"       content="Noregstoget — Live Norwegian Train Map" />
+  <meta name="twitter:description"
+    content="Sanntids togposisjonar på eit skjematisk kart over Noreg. 26 jernbaneliner, ~280 stasjonar." />
+  <meta name="twitter:image"       content="https://togkartet.msge.no/og-image.png" />
+
   <title>Noregstoget — Live Norwegian Train Map</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/protobufjs@7/dist/protobuf.min.js"></script>
   <link rel="stylesheet" href="style.css" />
+
+  <!-- ── JSON-LD structured data ──────────────────────────────── -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebApplication",
+    "name": "Noregstoget",
+    "alternateName": "Live Norwegian Train Map",
+    "url": "https://togkartet.msge.no/",
+    "description": "Skjematisk kart over det norske jernbanenettet med sanntids togposisjonar, avgangstavler og forseinkingsinformasjon. A schematic tube-map-style visualization of the Norwegian passenger rail network showing live train positions, departure boards, and delay data.",
+    "applicationCategory": "TransportationApplication",
+    "operatingSystem": "Web",
+    "browserRequirements": "Requires JavaScript",
+    "inLanguage": ["no", "nb"],
+    "isAccessibleForFree": true,
+    "featureList": [
+      "Real-time train position tracking (15-second updates)",
+      "Schematic tube-map-style railway visualization",
+      "26 Norwegian passenger rail lines",
+      "Approximately 280 stations",
+      "Departure and arrival boards per station",
+      "Train delay information",
+      "Route and stop details per train",
+      "Dark mode support",
+      "Operators: Vy, SJ Nord, Go Ahead Nordic, Gjøvikbanen, FlixTrain"
+    ],
+    "author": { "@type": "Person", "name": "Markus" },
+    "license": "https://opensource.org/licenses/MIT",
+    "keywords": [
+      "norwegian railways", "norsk jernbane", "togkart", "noregstoget",
+      "live train map", "sanntid", "Vy", "SJ Nord", "Entur",
+      "Bergensbanen", "Dovrebanen", "Sørlandsbanen", "Nordlandsbanen"
+    ]
+  }
+  </script>
 </head>
 <body>
   <div id="map">
@@ -43,6 +103,81 @@
   <div id="status-bar">
     <span id="status-text">Laster…</span>
   </div>
+
+  <!-- ── LLM / no-JS context ──────────────────────────────────── -->
+  <!--
+    Visually hidden; present in DOM for LLM crawlers that do not execute JS.
+    CSS clip is used (not display:none) so the content remains in the document.
+  -->
+  <section id="llm-context" aria-hidden="true"
+    style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;">
+    <h1>Noregstoget — Live Norwegian Train Map</h1>
+    <p>Noregstoget er eit skjematisk kart over det norske jernbanenettet som viser togposisjonar i sanntid. Kartet er utforma som eit rørbanenett-kart (London Tube-stil) og dekkjer alle norske passasjertogruter.</p>
+    <p>Noregstoget is a schematic, tube-map-style visualization of Norway's passenger rail network. It displays live train positions updated every 15 seconds, using data from Entur's public APIs.</p>
+    <h2>Kva kartet viser / What the map shows</h2>
+    <ul>
+      <li>26 norske passasjertoglinjer / 26 Norwegian passenger rail lines</li>
+      <li>Omtrent 280 stasjonar / Approximately 280 stations</li>
+      <li>Sanntids togposisjonar oppdatert kvart 15. sekund / Real-time train positions updated every 15 seconds</li>
+      <li>Avgangstavler og ankomsttavler per stasjon / Departure and arrival boards per station</li>
+      <li>Ruteinfo og forseinkingar per tog / Route details and delays per train</li>
+    </ul>
+    <h2>Toglinjer / Railway Lines</h2>
+    <ul>
+      <li>Bergensbanen (Bergen–Oslo S) — Vy</li>
+      <li>Flåmsbana (Myrdal–Flåm) — Vy</li>
+      <li>Sørlandsbanen (Stavanger–Oslo S) — Go Ahead Nordic</li>
+      <li>Raumabanen (Åndalsnes–Dombås) — SJ Nord</li>
+      <li>Arendalsbanen (Nelaug–Arendal) — Go Ahead Nordic</li>
+      <li>Dovrebanen (Trondheim–Oslo S) — SJ Nord / Vy</li>
+      <li>Rørosbanen (Støren–Hamar via Røros) — SJ Nord</li>
+      <li>Nordlandsbanen (Bodø–Trondheim) — SJ Nord</li>
+      <li>Ofotbanen (Narvik–Swedish border) — SJ</li>
+      <li>Meråkerbanen (Trondheim S–Swedish border) — SJ Nord</li>
+      <li>Kongsvingerbanen (Oslo S–Swedish border) — Vy</li>
+      <li>Østfoldbanen (Oslo S–Halden, Swedish border) — Vy</li>
+      <li>Gjøvikbanen (Oslo S–Gjøvik) — Gjøvikbanen AS</li>
+      <li>Gardermobanen (Oslo S–Oslo Lufthavn) — Vy</li>
+      <li>Jærbanen (Stavanger–Egersund) — Go Ahead Nordic</li>
+      <li>Vestfoldbanen (Oslo S–Skien) — Go Ahead Nordic</li>
+      <li>Bratsbergbanen (Notodden–Skien) — Go Ahead Nordic</li>
+      <li>Randsfjordbanen (Oslo S–Hønefoss/Fagernes) — Vy</li>
+    </ul>
+    <h2>Operatørar / Operators</h2>
+    <ul>
+      <li>Vy (VYG) — largest national operator; Bergensbanen, commuter lines, Østfoldbanen</li>
+      <li>SJ Nord (SJN) — long-distance northern routes; Nordlandsbanen, Dovrebanen, Rørosbanen</li>
+      <li>Go Ahead Nordic (GOA) — Sørlandsbanen, Vestfoldbanen, Jærbanen</li>
+      <li>Gjøvikbanen AS (GJB) — Oslo–Gjøvik commuter service</li>
+      <li>FlixTrain (FLT) — budget intercity</li>
+    </ul>
+    <h2>Datakjelder / Data Sources</h2>
+    <ul>
+      <li>Entur GTFS-RT vehicle positions: https://api.entur.io/realtime/v1/gtfs-rt/vehicle-positions</li>
+      <li>Entur SIRI-VM fallback: https://api.entur.io/realtime/v1/rest/vm</li>
+      <li>Entur Journey Planner GraphQL: https://api.entur.io/journey-planner/v3/graphql</li>
+    </ul>
+    <p>Alle Entur-API-ar er opne og gratis (ingen API-nøkkel krevst). / All Entur APIs are open, free, and require no API key.</p>
+    <h2>Slik brukar du kartet / How to use</h2>
+    <ol>
+      <li>Opne https://togkartet.msge.no i nettlesaren din / Open https://togkartet.msge.no in your browser</li>
+      <li>Tog vises som fargekoda prikkar på kartet / Trains appear as colour-coded dots on the map</li>
+      <li>Klikk på eit tog for å sjå rute, stasjonar og forseinkingsinformasjon / Click a train to see its route, stops and delay info</li>
+      <li>Klikk på ein stasjon for å sjå avgangstavle / Click a station to see the departure board</li>
+      <li>Kartet oppdaterer seg automatisk kvart 15. sekund / The map refreshes automatically every 15 seconds</li>
+    </ol>
+    <h2>Teknisk / Technical</h2>
+    <p>Vanilla JavaScript SPA (ingen rammeverk / no framework). Leaflet.js for kartvisning / map rendering. Protocol Buffers (protobuf.js) for GTFS-RT-dekoding / GTFS-RT decoding. Hosta på GitHub Pages / Hosted on GitHub Pages. Kildekode / Source: https://github.com/mmsge/togkartet</p>
+  </section>
+
+  <noscript>
+    <div style="font-family:sans-serif;padding:2rem;max-width:600px;margin:auto">
+      <h1>Noregstoget — Live Norwegian Train Map</h1>
+      <p>Dette kartet krev JavaScript. Aktiver JavaScript i nettlesaren din for å sjå sanntids togposisjonar på det norske jernbanenettet.</p>
+      <p>This map requires JavaScript. Please enable JavaScript in your browser to view live Norwegian train positions.</p>
+      <p>Data: <a href="https://entur.no">Entur</a> — <a href="https://togkartet.msge.no">togkartet.msge.no</a></p>
+    </div>
+  </noscript>
 
   <script src="app.js"></script>
 </body>

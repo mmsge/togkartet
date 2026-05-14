@@ -1,0 +1,68 @@
+# Noregstoget
+
+> A schematic, tube-map-style live map of the Norwegian passenger rail network.
+
+Live URL: https://togkartet.msge.no
+Language: Norwegian Nynorsk (interface) / bilingual descriptions
+License: MIT
+Source: https://github.com/mmsge/togkartet
+
+## What it does
+
+- Displays real-time train positions on a schematic railway map of Norway
+- Updates every 15 seconds using Entur's public GTFS-RT and SIRI-VM feeds
+- Covers 26 Norwegian passenger rail lines and approximately 280 stations
+- Click any train: see its route, operator, scheduled stops, and current delay
+- Click any station: see a live departure/arrival board
+- Dark mode support; works in any modern browser; no login required
+
+## Lines covered
+
+| Line | Route | Operator |
+|------|-------|----------|
+| Bergensbanen | Bergen – Oslo S | Vy |
+| Flåmsbana | Myrdal – Flåm | Vy |
+| Sørlandsbanen | Stavanger – Oslo S | Go Ahead Nordic |
+| Raumabanen | Åndalsnes – Dombås | SJ Nord |
+| Arendalsbanen | Nelaug – Arendal | Go Ahead Nordic |
+| Dovrebanen | Trondheim S – Oslo S | SJ Nord / Vy |
+| Rørosbanen | Støren – Hamar (via Røros) | SJ Nord |
+| Nordlandsbanen | Bodø – Trondheim S | SJ Nord |
+| Ofotbanen | Narvik – Swedish border | SJ |
+| Meråkerbanen | Trondheim S – Swedish border | SJ Nord |
+| Kongsvingerbanen | Oslo S – Swedish border (Kongsvinger) | Vy |
+| Østfoldbanen | Oslo S – Swedish border (Halden) | Vy |
+| Gjøvikbanen | Oslo S – Gjøvik | Gjøvikbanen AS |
+| Gardermobanen | Oslo S – Oslo Lufthavn | Vy |
+| Jærbanen | Stavanger – Egersund | Go Ahead Nordic |
+| Vestfoldbanen | Oslo S – Skien | Go Ahead Nordic |
+| Bratsbergbanen | Notodden – Skien | Go Ahead Nordic |
+| Randsfjordbanen | Oslo S – Hønefoss / Fagernes | Vy |
+
+## Operators
+
+- **Vy** (codespace: VYG) — largest operator; Bergensbanen, Østfoldbanen, Kongsvingerbanen, Gardermobanen, commuter lines
+- **SJ Nord** (codespace: SJN) — Nordlandsbanen, Dovrebanen, Rørosbanen, Raumabanen, Meråkerbanen
+- **Go Ahead Nordic** (codespace: GOA) — Sørlandsbanen, Arendalsbanen, Vestfoldbanen, Jærbanen
+- **Gjøvikbanen AS** (codespace: GJB) — Oslo–Gjøvik commuter service
+- **FlixTrain** (codespace: FLT) — budget intercity
+
+## Data sources
+
+All APIs are provided by Entur (Norwegian public transport authority). No API key required.
+
+- GTFS-RT vehicle positions: `https://api.entur.io/realtime/v1/gtfs-rt/vehicle-positions`
+- SIRI-VM fallback: `https://api.entur.io/realtime/v1/rest/vm`
+- Journey Planner (routes, stop times, delays): `https://api.entur.io/journey-planner/v3/graphql`
+
+## Update cadence
+
+Train positions refresh every 15 seconds. Station departure boards are fetched on demand when a station is clicked (90-second client-side cache).
+
+## Technology
+
+Vanilla JavaScript SPA — no build system, no npm dependencies at runtime. Leaflet.js (CDN) for map rendering. Protocol Buffers (protobuf.js, CDN) for GTFS-RT decoding. Network topology stored in `data/network.json` (schematic coordinates). Deployed on GitHub Pages via GitHub Actions from the `hovud` branch.
+
+## For more detail
+
+See `/llms-full.txt` for the complete technical reference including the network JSON schema, real-time data pipeline, key NSR stop IDs, and known limitations.
