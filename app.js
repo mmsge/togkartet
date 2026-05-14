@@ -40,6 +40,7 @@ const stopBoardCache = new Map(); // nsrId → { calls, fetchedAt }
 const STOP_BOARD_TTL = 90_000; // 90 s — how long board data is considered fresh
 let journeyFetchQueue = [];
 let journeyFetchInProgress = false;
+let lastVehicles = [];
 
 // ── Map initialisation (deferred until network.json loads) ──────────────────
 
@@ -587,6 +588,7 @@ function updateMarkers(vehicles) {
     console.info('Trains on lines not in the schematic:', newlyUnmapped);
   }
 
+  if (Object.keys(trainMarkers).length > 0) hideLoadingOverlay();
   processJourneyFetchQueue();
 
   return { total: vehicles.length, placed: placedCount, awaitingJourney, unmappedLine: unmappedLineCount, unplaceable };
@@ -605,6 +607,9 @@ async function processJourneyFetchQueue() {
     }
   }));
   journeyFetchInProgress = false;
+  // Re-render immediately so newly-resolved journeys appear without waiting for
+  // the next 15-second refresh cycle.
+  if (lastVehicles.length > 0) updateMarkers(lastVehicles);
   if (journeyFetchQueue.length > 0) setTimeout(processJourneyFetchQueue, 300);
 }
 
@@ -993,6 +998,7 @@ async function onMarkerClick(id) {
 async function refresh() {
   try {
     const vehicles = await fetchVehiclePositions();
+    lastVehicles = vehicles;
     const stats = updateMarkers(vehicles);
     updateStatusBar(stats, false);
   } catch (e) {
@@ -1044,11 +1050,20 @@ async function prefetchStopBoards() {
 
 // ── Boot ────────────────────────────────────────────────────────────────────
 
+function hideLoadingOverlay() {
+  const el = document.getElementById('loading-overlay');
+  if (!el) return;
+  el.classList.add('hidden');
+  el.addEventListener('transitionend', () => el.remove(), { once: true });
+}
+
 (async () => {
   await loadNetwork();
   const protoOk = await initProto();
   if (!protoOk) console.warn('protobuf unavailable, using SIRI-VM');
   await refresh();
+  // Fallback: dismiss overlay after 10 s even if no trains loaded (e.g. API failure)
+  setTimeout(hideLoadingOverlay, 10_000);
   setInterval(refresh, CONFIG.updateIntervalMs);
 
   // Warm the stop board cache after the initial render settles, then keep it fresh.
