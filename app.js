@@ -26,6 +26,7 @@ const CONFIG = {
 const trainMarkers = {};
 let selectedId = null;
 let protoRoot = null;
+let pendingTripId = null;
 
 // Schematic network (loaded from data/network.json at boot).
 let network = null;
@@ -544,6 +545,10 @@ function updateMarkers(vehicles) {
         marker._vehicleData = v;
         marker.on('click', () => onMarkerClick(v.id));
         trainMarkers[v.id] = marker;
+        if (pendingTripId && v.tripId === pendingTripId) {
+          onMarkerClick(v.id);
+          pendingTripId = null;
+        }
       }
     } else {
       if (!cached || !cached.journey) {
@@ -641,7 +646,8 @@ const detailClose = document.getElementById('detail-close');
 detailClose.addEventListener('click', closePanel);
 
 function openPanel() { detailPanel.classList.add('open'); }
-function closePanel() { detailPanel.classList.remove('open'); selectedId = null; }
+function closePanel() { detailPanel.classList.remove('open'); selectedId = null; clearHash(); }
+function clearHash() { history.replaceState(null, '', location.pathname); }
 function showSpinner() { detailContent.innerHTML = '<div class="spinner"></div>'; }
 
 function fmt(isoStr) {
@@ -906,6 +912,8 @@ function openStationPopup(nsrId, station) {
   spCalls = null;
   stationPopupName.textContent = station.name;
 
+  location.hash = '#station/' + encodeURIComponent(nsrId);
+
   document.querySelectorAll('.sp-tab').forEach(t => t.classList.remove('active'));
   document.querySelector('.sp-tab[data-view="departure"]').classList.add('active');
   stationPopupTrackRow.hidden = true;
@@ -932,6 +940,7 @@ function closeStationPopup() {
   stationPopupEl.hidden = true;
   spNsrId = null;
   spCalls = null;
+  clearHash();
 }
 
 document.getElementById('station-popup-close').addEventListener('click', closeStationPopup);
@@ -965,6 +974,7 @@ async function onMarkerClick(id) {
   }
 
   const tripId = vehicleData.tripId || vehicleData.id;
+  location.hash = '#train/' + encodeURIComponent(tripId);
 
   if (isLineRef(tripId)) {
     const color = CONFIG.operatorColors[vehicleData.operatorCode] || CONFIG.operatorColors.DEFAULT;
@@ -1048,6 +1058,48 @@ async function prefetchStopBoards() {
   }
 }
 
+// ── Hash routing ───────────────────────────────────────────────────────────
+
+function parseAndApplyHash() {
+  const hash = location.hash.slice(1);
+  if (!hash) return;
+
+  const match = hash.match(/^(station|train)\/(.+)$/);
+  if (!match) return;
+
+  const [, type, encoded] = match;
+  try {
+    const id = decodeURIComponent(encoded);
+    if (type === 'station') {
+      const station = network?.stations?.[id];
+      if (station) {
+        openStationPopup(id, station);
+      }
+    } else if (type === 'train') {
+      pendingTripId = id;
+      for (const [markerId, marker] of Object.entries(trainMarkers)) {
+        const vData = marker._vehicleData;
+        if (vData && vData.tripId === id) {
+          onMarkerClick(markerId);
+          pendingTripId = null;
+          break;
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('Failed to parse hash:', e);
+  }
+}
+
+function onHashChange() {
+  if (location.hash.startsWith('#train/') || location.hash.startsWith('#station/')) {
+    parseAndApplyHash();
+  } else {
+    closePanel();
+    closeStationPopup();
+  }
+}
+
 // ── Boot ────────────────────────────────────────────────────────────────────
 
 function hideLoadingOverlay() {
@@ -1059,6 +1111,8 @@ function hideLoadingOverlay() {
 
 (async () => {
   await loadNetwork();
+  parseAndApplyHash();
+  window.addEventListener('hashchange', onHashChange);
   const protoOk = await initProto();
   if (!protoOk) console.warn('protobuf unavailable, using SIRI-VM');
   await refresh();
