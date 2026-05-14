@@ -1,0 +1,176 @@
+# Noregstoget — Full LLM Reference
+
+Live URL: https://togkartet.msge.no
+Source: https://github.com/mmsge/togkartet
+License: MIT
+
+## Purpose
+
+Noregstoget ("Norway's train" in Nynorsk) is a browser-based live train map that renders the Norwegian passenger rail network as a schematic, London Tube-style diagram and overlays real-time vehicle positions fetched from Entur's public transport APIs. The goal is to give a clear, always-current view of where trains are across the entire country.
+
+## File structure
+
+```
+index.html          — minimal HTML shell; all UI is JS-rendered
+app.js              — all application logic (~1 000 lines, Vanilla JS)
+style.css           — styling including dark-mode rules
+data/network.json   — pre-built schematic network topology
+tools/
+  build-network.mjs — Node.js script that regenerates network.json from Entur APIs
+  serve.mjs         — minimal local dev server (avoids CORS issues)
+llms.txt            — LLM-friendly summary (llmstxt.org format)
+llms-full.txt       — this file
+```
+
+No build step at deploy time. The network data is generated once by `tools/build-network.mjs` and committed. GitHub Actions deploys the static files directly to GitHub Pages.
+
+## data/network.json schema
+
+Top-level keys:
+
+```
+{
+  "bounds":     { "minX", "maxX", "minY", "maxY" },
+  "projection": { "centerLat", "centerLon", "scale" },
+  "stations":   { "<name>": StationObject },
+  "lines":      [ LineObject ]
+}
+```
+
+### StationObject
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `x` | number | Schematic x coordinate (integer grid units) |
+| `y` | number | Schematic y coordinate (integer grid units, y increases southward) |
+| `lat` | number | Real-world WGS84 latitude |
+| `lon` | number | Real-world WGS84 longitude |
+| `ids` | string[] | Entur NSR StopPlace IDs, e.g. `["NSR:StopPlace:337"]` |
+| `bnCode` | string\|null | Bane NOR telegraphic code for rtd.banenor.no; null if unavailable |
+| `interchange` | boolean | True if served by more than one line |
+| `lines` | string[] | Line IDs that stop at this station |
+
+### LineObject
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | string | Kebab-case identifier, e.g. `"bergensbanen"` |
+| `name` | string | Display name in Norwegian |
+| `color` | string | Hex colour for rendering |
+| `tier` | string | `trunk` / `regional` / `commuter` / `branch` — controls zoom-level visibility |
+| `serviceLineIds` | string[] | Entur line IDs (`<codespace>:Line:<code>`) mapped to this schematic line |
+| `stops` | string[] | Ordered station names (terminals and major interchanges) |
+| `polyline` | object[] | `{x, y, station?}` points — includes bend points between named stops |
+| `dashed` | object[] | Optional: points for a dashed continuation (e.g. cross-border) |
+
+## Complete line inventory
+
+| ID | Name | Tier | Colour | Key terminals |
+|----|------|------|--------|---------------|
+| bergensbanen | Bergensbanen | trunk | #00b251 | Bergen – Oslo S |
+| flamsbana | Flåmsbana | branch | #a2a2a2 | Myrdal – Flåm |
+| sorlandsbanen | Sørlandsbanen | trunk | #0896d7 | Stavanger – Oslo S |
+| raumabanen | Raumabanen | branch | #f0ce15 | Åndalsnes – Dombås |
+| arendalsbanen | Arendalsbanen | branch | #f0ce15 | Nelaug – Arendal |
+| dovrebanen | Dovrebanen | trunk | #9768ee | Trondheim S – Oslo S |
+| rorosbanen | Rørosbanen | regional | #df8600 | Støren – Hamar (via Røros, Elverum) |
+| nordlandsbanen | Nordlandsbanen | trunk | #2954ff | Bodø – Trondheim S |
+| ofotbanen | Ofotbanen | trunk | #ff00d0 | Narvik – Swedish border (Bjørnfjell) |
+| merakerbanen | Meråkerbanen | regional | #ff00d0 | Trondheim S – Swedish border (Kopperå) |
+| kongsvingerbanen | Kongsvingerbanen | regional | #ff00d0 | Oslo S – Swedish border (Kongsvinger) |
+| ostfoldbanen | Østfoldbanen | trunk | #ff00d0 | Oslo S – Swedish border (Halden) |
+| gjovikbanen | Gjøvikbanen | commuter | #8b4513 | Oslo S – Gjøvik |
+| gardermobanen | Gardermobanen | trunk | #e4032e | Oslo S – Oslo Lufthavn Gardermoen |
+| jaerbanen | Jærbanen | commuter | #0896d7 | Stavanger – Egersund |
+| vestfoldbanen | Vestfoldbanen | trunk | #0896d7 | Oslo S – Skien |
+| bratsbergbanen | Bratsbergbanen | branch | #0896d7 | Notodden – Skien |
+| randsfjordbanen | Randsfjordbanen | regional | #e4032e | Oslo S – Hønefoss / Fagernes |
+
+## Operators and Entur codespaces
+
+| Codespace | Operator | Primary lines |
+|-----------|----------|---------------|
+| VYG | Vy | Bergensbanen, Dovrebanen (partial), Kongsvingerbanen, Østfoldbanen, Gardermobanen, Randsfjordbanen |
+| SJN | SJ Nord | Nordlandsbanen, Dovrebanen (partial), Rørosbanen, Raumabanen, Meråkerbanen |
+| GOA | Go Ahead Nordic | Sørlandsbanen, Arendalsbanen, Vestfoldbanen, Jærbanen, Bratsbergbanen |
+| GJB | Gjøvikbanen AS | Gjøvikbanen (Oslo S–Gjøvik) |
+| FLT | FlixTrain | Budget intercity (seasonal) |
+| RUT | Ruter | Oslo area (some services on shared infrastructure) |
+
+## Real-time data pipeline
+
+1. Every 15 s, `app.js` fetches the GTFS-RT vehicle positions feed (Protocol Buffer binary) from `https://api.entur.io/realtime/v1/gtfs-rt/vehicle-positions`.
+2. If that request fails, it falls back to SIRI-VM (JSON) from `https://api.entur.io/realtime/v1/rest/vm`.
+3. Each vehicle entity carries a `tripId` (GTFS-RT) or `journeyRef` (SIRI-VM). The operator codespace is extracted from the first colon-delimited segment.
+4. The vehicle's current stop sequence index is interpolated against the schematic line polyline to place a marker at the correct proportional position between stops.
+5. Bearing is derived from the interpolated direction vector and used to orient the chevron/arrow icon.
+6. Markers are Leaflet `divIcon`s with an SVG element coloured per operator.
+
+## Journey Planner queries (on demand)
+
+When a user clicks a train, `app.js` sends a GraphQL query to `https://api.entur.io/journey-planner/v3/graphql` for:
+
+```graphql
+serviceJourney(id: $id) {
+  id
+  line { publicCode name operator { name } }
+  passingTimes {
+    quay { name }
+    scheduledArrival scheduledDeparture
+    expectedArrival expectedDeparture
+    realtime
+    cancellation
+  }
+}
+```
+
+When a user clicks a station, it queries `estimatedCalls` on the stop place to populate the departure/arrival board (90-second client-side cache).
+
+## Key NSR StopPlace identifiers
+
+| Station | NSR ID |
+|---------|--------|
+| Oslo S | NSR:StopPlace:337 |
+| Bergen | NSR:StopPlace:548 |
+| Trondheim S | NSR:StopPlace:59977 |
+| Bodø | NSR:StopPlace:507 |
+| Stavanger | NSR:StopPlace:596 |
+| Kristiansand | NSR:StopPlace:570 |
+| Lillehammer | NSR:StopPlace:580 |
+| Hamar | NSR:StopPlace:560 |
+| Myrdal | NSR:StopPlace:59628 |
+| Flåm | NSR:StopPlace:59631 |
+
+## Schematic coordinate system
+
+Coordinates use a simple equirectangular projection centred on Norway, implemented via Leaflet `CRS.Simple`. The schematic layout matches a metromapmaker.com diagram (key: TN7q-Qcf). The y-axis is flipped so that north is up on screen. The build script (`tools/build-network.mjs`) auto-positions most stations by:
+
+1. Fetching all stops for each line from the Entur API
+2. Filtering to a hand-maintained allowlist of 26 lines
+3. Projecting lat/lon to a grid via equirectangular projection centred at approximately 65°N, 15°E
+4. Fitting a principal-axis line (PCA) through each line's stops to straighten the schematic
+5. Applying hand-authored overrides for the Oslo central area, where many lines converge
+
+## Caching
+
+| Data | TTL |
+|------|-----|
+| Vehicle positions | 15 s (re-fetched on each interval tick) |
+| Journey details (clicked train) | 10 min (sessionStorage) |
+| Station departure board | 90 s (in-memory Map) |
+
+## Deployment
+
+- Hosted at `https://togkartet.msge.no` (custom domain pointed at GitHub Pages)
+- GitHub Actions workflow in `.github/workflows/deploy.yml`
+- Triggers on: push to `hovud` branch or manual `workflow_dispatch`
+- No build step — the entire repo root is uploaded as the Pages artifact
+
+## Known limitations
+
+- Not all trains carry GPS transponders; some vehicles will not appear on the map.
+- 15-second update cadence is set by the Entur feed refresh rate.
+- Some line segments have visible geometry kinks where manual coordinate overrides hand off to auto-positioned stops (notably the RE10/Hovedbanen corridor between Lillestrøm and Hamar).
+- Station labels overlap in dense urban clusters at moderate zoom. Only terminal and interchange stations are visible at zoom levels below 3; all stations appear at zoom ≥ 3.
+- Cross-border continuation segments (into Sweden via Ofotbanen, Meråkerbanen, Kongsvingerbanen, Østfoldbanen) are shown as dashed lines because Swedish stations are outside the schematic.
+- FlixTrain services are seasonal and may not appear outside their operating timetable.
