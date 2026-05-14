@@ -1,8 +1,8 @@
 import './theme.js';
 import { CONFIG } from './config.js';
 import { initProto, fetchVehiclePositions } from './gtfs.js';
-import { loadNetwork, map, setStationClickHandler } from './schematic.js';
-import { openStationPopup, closeStationPopup, prefetchStopBoards } from './station-popup.js';
+import { loadNetwork, map, network } from './schematic.js';
+import { closeStationPopup, prefetchStopBoards } from './station-popup.js';
 import { updateMarkers, trainMarkers, setLastVehicles } from './train-markers.js';
 
 const statusBar  = document.getElementById('status-bar');
@@ -36,8 +36,6 @@ async function refresh() {
   }
 }
 
-// Wire cross-module interactions that would otherwise create circular imports.
-setStationClickHandler(openStationPopup);
 map.on('click', closeStationPopup);
 
 (async () => {
@@ -50,6 +48,6 @@ map.on('click', closeStationPopup);
   setInterval(refresh, CONFIG.updateIntervalMs);
 
   // Warm the stop board cache after the initial render settles, then keep it fresh.
-  setTimeout(prefetchStopBoards, 3_000);
-  setInterval(prefetchStopBoards, 70_000);
+  setTimeout(() => prefetchStopBoards(network), 3_000);
+  setInterval(() => prefetchStopBoards(network), 70_000);
 })();

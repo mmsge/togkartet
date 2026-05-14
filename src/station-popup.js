@@ -1,5 +1,5 @@
 import { CONFIG } from './config.js';
-import { map, network } from './schematic.js';
+import { map } from './map.js';
 import { escHtml } from './detail-panel.js';
 
 const stationPopupEl        = document.getElementById('station-popup');
@@ -175,7 +175,7 @@ stationPopupTrackInput.addEventListener('input', () => { if (spCalls) spRenderBo
 
 // Warm the stop board cache in the background so popups open instantly.
 // Major stations are fetched first; the rest follow in network order.
-export async function prefetchStopBoards() {
+export async function prefetchStopBoards(network) {
   if (!network) return;
 
   // Collect one NSR ID per unique physical station (same dedup as the map).

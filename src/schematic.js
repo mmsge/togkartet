@@ -1,16 +1,7 @@
 import { escHtml } from './detail-panel.js';
-
-// L (Leaflet) is a global loaded via <script> before this module runs.
-export const map = L.map('map', {
-  crs: L.CRS.Simple,
-  center: [0, 0],
-  zoom: 1,
-  zoomControl: true,
-  minZoom: -2,
-  maxZoom: 5,
-  zoomDelta: 0.5,
-  zoomSnap: 0.25,
-});
+import { openStationPopup } from './station-popup.js';
+import { map } from './map.js';
+export { map };
 
 export let network = null;
 
@@ -21,10 +12,6 @@ const labelLayer = L.layerGroup();
 const linePolylines = []; // [{ tier, polyline }]
 const stationDots = [];   // [{ stationId, marker, isTerminal, isInterchange, tiers }]
 const stationLabels = []; // [{ stationId, marker, isTerminal, isInterchange, tiers }]
-
-// Wired from main.js to avoid a circular dep (station-popup imports map from here).
-let _onStationClick = null;
-export function setStationClickHandler(fn) { _onStationClick = fn; }
 
 export async function loadNetwork() {
   const netResp = await fetch('data/network.json');
@@ -117,7 +104,7 @@ function drawNetwork() {
       interactive: true,
       keyboard: false,
     });
-    dot.on('click', (e) => { L.DomEvent.stopPropagation(e); _onStationClick?.(id, s); });
+    dot.on('click', (e) => { L.DomEvent.stopPropagation(e); openStationPopup(id, s); });
     dot.addTo(stationLayer);
 
     const label = L.marker([s.y, s.x], {
@@ -130,7 +117,7 @@ function drawNetwork() {
       interactive: true,
       keyboard: false,
     });
-    label.on('click', (e) => { L.DomEvent.stopPropagation(e); _onStationClick?.(id, s); });
+    label.on('click', (e) => { L.DomEvent.stopPropagation(e); openStationPopup(id, s); });
     label.addTo(labelLayer);
 
     const entry = {
