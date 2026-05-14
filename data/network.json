@@ -17,6 +17,7 @@
       "y": -60,
       "lat": 60.39,
       "lon": 5.3337,
+      "bnCode": "BRG",
       "lines": [
         "bergensbanen"
       ],
@@ -28,6 +29,7 @@
       "y": -60,
       "lat": 60.6291,
       "lon": 6.4098,
+      "bnCode": "VOS",
       "lines": [
         "bergensbanen"
       ],
@@ -39,6 +41,7 @@
       "y": -55,
       "lat": 60.8632,
       "lon": 7.1138,
+      "bnCode": "FLAM",
       "lines": [
         "flamsbana"
       ],
@@ -50,6 +53,7 @@
       "y": -60,
       "lat": 60.7351,
       "lon": 7.123,
+      "bnCode": "MRL",
       "lines": [
         "bergensbanen",
         "flamsbana"
@@ -62,6 +66,7 @@
       "y": -43,
       "lat": 62.566,
       "lon": 7.6859,
+      "bnCode": "AND",
       "lines": [
         "raumabanen"
       ],
@@ -73,6 +78,7 @@
       "y": -60,
       "lat": 60.5347,
       "lon": 8.2067,
+      "bnCode": "GEI",
       "lines": [
         "bergensbanen"
       ],
@@ -84,6 +90,7 @@
       "y": -63,
       "lat": 60.1692,
       "lon": 10.2489,
+      "bnCode": "HNF",
       "lines": [
         "bergensbanen"
       ],
@@ -95,6 +102,7 @@
       "y": -34,
       "lat": 63.436279,
       "lon": 10.399123,
+      "bnCode": "T",
       "lines": [
         "dovrebanen",
         "nordlandsbanen",
@@ -108,6 +116,7 @@
       "y": -34,
       "lat": 63.436279,
       "lon": 10.399123,
+      "bnCode": "T",
       "lines": [
         "dovrebanen",
         "nordlandsbanen",
@@ -121,6 +130,7 @@
       "y": -38,
       "lat": 63.0421,
       "lon": 10.2858,
+      "bnCode": "SR",
       "lines": [
         "dovrebanen",
         "rorosbanen"
@@ -133,6 +143,7 @@
       "y": -47,
       "lat": 62.0759,
       "lon": 9.1218,
+      "bnCode": "DB",
       "lines": [
         "raumabanen",
         "dovrebanen"
@@ -145,6 +156,7 @@
       "y": -53,
       "lat": 61.5944,
       "lon": 9.7351,
+      "bnCode": "VIS",
       "lines": [
         "dovrebanen"
       ],
@@ -156,6 +168,7 @@
       "y": -67,
       "lat": 59.74,
       "lon": 10.205,
+      "bnCode": "DM",
       "lines": [
         "bergensbanen",
         "sorlandsbanen"
@@ -168,6 +181,7 @@
       "y": -56,
       "lat": 61.1167,
       "lon": 10.4612,
+      "bnCode": "LHM",
       "lines": [
         "dovrebanen"
       ],
@@ -179,6 +193,7 @@
       "y": -26,
       "lat": 64.0157,
       "lon": 11.4998,
+      "bnCode": "SK",
       "lines": [
         "nordlandsbanen"
       ],
@@ -190,6 +205,7 @@
       "y": -30,
       "lat": 63.4719,
       "lon": 10.9249,
+      "bnCode": "STD",
       "lines": [
         "nordlandsbanen"
       ],
@@ -201,6 +217,7 @@
       "y": -17,
       "lat": 67.2851,
       "lon": 14.3879,
+      "bnCode": "BO",
       "lines": [
         "nordlandsbanen"
       ],
@@ -212,6 +229,7 @@
       "y": -17,
       "lat": 67.2851,
       "lon": 14.3879,
+      "bnCode": "BO",
       "lines": [
         "nordlandsbanen"
       ],
@@ -223,6 +241,7 @@
       "y": -17,
       "lat": 67.2851,
       "lon": 14.3879,
+      "bnCode": "BO",
       "lines": [
         "nordlandsbanen"
       ],
@@ -234,6 +253,7 @@
       "y": -12,
       "lat": 68.44151,
       "lon": 17.441289,
+      "bnCode": "NAR",
       "lines": [
         "ofotbanen"
       ],
@@ -245,6 +265,7 @@
       "y": -34,
       "lat": 63.392005,
       "lon": 11.847768,
+      "bnCode": null,
       "lines": [
         "merakerbanen"
       ],
@@ -256,6 +277,7 @@
       "y": -59,
       "lat": 60.796,
       "lon": 11.07,
+      "bnCode": "HAM",
       "lines": [
         "dovrebanen",
         "rorosbanen"
@@ -268,6 +290,7 @@
       "y": -65,
       "lat": 59.9111,
       "lon": 10.7557,
+      "bnCode": "OS",
       "lines": [
         "bergensbanen",
         "dovrebanen",
@@ -282,6 +305,7 @@
       "y": -19,
       "lat": 67.2599,
       "lon": 15.3927,
+      "bnCode": "FK",
       "lines": [
         "nordlandsbanen"
       ],
@@ -293,6 +317,7 @@
       "y": -19,
       "lat": 67.2599,
       "lon": 15.3927,
+      "bnCode": "FK",
       "lines": [
         "nordlandsbanen"
       ],
@@ -304,6 +329,7 @@
       "y": -19,
       "lat": 67.2599,
       "lon": 15.3927,
+      "bnCode": "FK",
       "lines": [
         "nordlandsbanen"
       ],
@@ -315,6 +341,7 @@
       "y": -23,
       "lat": 66.3145,
       "lon": 14.1421,
+      "bnCode": "MO",
       "lines": [
         "nordlandsbanen"
       ],
@@ -326,6 +353,7 @@
       "y": -71,
       "lat": 58.9696,
       "lon": 5.7332,
+      "bnCode": "STV",
       "lines": [
         "sorlandsbanen"
       ],
@@ -337,6 +365,7 @@
       "y": -73,
       "lat": 58.852305,
       "lon": 5.736575,
+      "bnCode": "SAS",
       "lines": [
         "sorlandsbanen"
       ],
@@ -348,6 +377,7 @@
       "y": -77,
       "lat": 58.4517,
       "lon": 6.0008,
+      "bnCode": "EG",
       "lines": [
         "sorlandsbanen"
       ],
@@ -359,6 +389,7 @@
       "y": -77,
       "lat": 58.14559,
       "lon": 7.988067,
+      "bnCode": "KRS",
       "lines": [
         "sorlandsbanen"
       ],
@@ -370,6 +401,7 @@
       "y": -73,
       "lat": 58.665,
       "lon": 8.626,
+      "bnCode": "NEL",
       "lines": [
         "sorlandsbanen",
         "arendalsbanen"
@@ -382,6 +414,7 @@
       "y": -75,
       "lat": 58.4636,
       "lon": 8.772,
+      "bnCode": "ARD",
       "lines": [
         "arendalsbanen"
       ],
@@ -393,6 +426,7 @@
       "y": -47,
       "lat": 62.5743,
       "lon": 11.3823,
+      "bnCode": "RO",
       "lines": [
         "rorosbanen"
       ],
@@ -404,6 +438,7 @@
       "y": -72,
       "lat": 59.7197,
       "lon": 10.8358,
+      "bnCode": "SKI",
       "lines": [
         "ostfoldbanen"
       ],
@@ -415,6 +450,7 @@
       "y": -12,
       "lat": 68.432799,
       "lon": 18.070133,
+      "bnCode": null,
       "lines": [
         "ofotbanen"
       ],
@@ -426,6 +462,7 @@
       "y": -54,
       "lat": 60.8807,
       "lon": 11.5631,
+      "bnCode": "ELV",
       "lines": [
         "rorosbanen"
       ],
@@ -437,6 +474,7 @@
       "y": -77,
       "lat": 59.1242,
       "lon": 11.3863,
+      "bnCode": "HAL",
       "lines": [
         "ostfoldbanen"
       ],
@@ -448,6 +486,7 @@
       "y": -61,
       "lat": 60.19,
       "lon": 11.997,
+      "bnCode": "KV",
       "lines": [
         "kongsvingerbanen"
       ],
