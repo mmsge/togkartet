@@ -259,7 +259,31 @@
       ],
       "interchange": false
     },
+    "NSR:StopPlace:58234": {
+      "name": "Narvik",
+      "x": 40,
+      "y": -12,
+      "lat": 68.44151,
+      "lon": 17.441289,
+      "bnCode": "NAR",
+      "lines": [
+        "ofotbanen"
+      ],
+      "interchange": false
+    },
     "NSR:StopPlace:62376": {
+      "name": "Kopperå",
+      "x": 40,
+      "y": -34,
+      "lat": 63.392005,
+      "lon": 11.847768,
+      "bnCode": null,
+      "lines": [
+        "merakerbanen"
+      ],
+      "interchange": false
+    },
+    "NSR:StopPlace:592": {
       "name": "Kopperå",
       "x": 40,
       "y": -34,
@@ -445,6 +469,18 @@
       "interchange": false
     },
     "NSR:StopPlace:62317": {
+      "name": "Bjørnfjell",
+      "x": 45,
+      "y": -12,
+      "lat": 68.432799,
+      "lon": 18.070133,
+      "bnCode": null,
+      "lines": [
+        "ofotbanen"
+      ],
+      "interchange": false
+    },
+    "NSR:StopPlace:58576": {
       "name": "Bjørnfjell",
       "x": 45,
       "y": -12,
@@ -711,6 +747,7 @@
       ],
       "stations": [
         "NSR:StopPlace:59977",
+        "NSR:StopPlace:659",
         "NSR:StopPlace:603",
         "NSR:StopPlace:645",
         "NSR:StopPlace:425",
@@ -808,15 +845,21 @@
       "tier": "trunk",
       "serviceLineIds": [
         "SJN:Line:71",
-        "SJN:Line:79"
+        "SJN:Line:79",
+        "SJN:Line:26"
       ],
       "stations": [
         "NSR:StopPlace:507",
+        "NSR:StopPlace:510",
+        "NSR:StopPlace:58952",
         "NSR:StopPlace:176",
+        "NSR:StopPlace:182",
+        "NSR:StopPlace:58954",
         "NSR:StopPlace:195",
         "NSR:StopPlace:714",
         "NSR:StopPlace:712",
-        "NSR:StopPlace:59977"
+        "NSR:StopPlace:59977",
+        "NSR:StopPlace:659"
       ],
       "polyline": [
         {
@@ -856,10 +899,14 @@
       "name": "Ofotbanen",
       "color": "#ff00d0",
       "tier": "trunk",
-      "serviceLineIds": [],
+      "serviceLineIds": [
+        "SJV:Line:0ff9f2b9-fbe5-4761-8a29-8813be35efaa"
+      ],
       "stations": [
         "NSR:StopPlace:62318",
-        "NSR:StopPlace:62317"
+        "NSR:StopPlace:58234",
+        "NSR:StopPlace:62317",
+        "NSR:StopPlace:58576"
       ],
       "polyline": [
         {
@@ -894,7 +941,9 @@
       ],
       "stations": [
         "NSR:StopPlace:59977",
-        "NSR:StopPlace:62376"
+        "NSR:StopPlace:659",
+        "NSR:StopPlace:62376",
+        "NSR:StopPlace:592"
       ],
       "polyline": [
         {
