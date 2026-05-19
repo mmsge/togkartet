@@ -143,6 +143,47 @@ function drawNetwork() {
   setTimeout(repaint, 50);
 }
 
+// GPS-based placement for vehicles that have lat/lon but no journey data.
+// Finds the two geographically nearest unique schematic stations on the line
+// and interpolates the schematic position between them.
+export function placeOnSchematicByGps(lat, lon, schemLine) {
+  if (!network) return null;
+
+  // Collect unique schematic stations (by x,y) that have geographic coords.
+  const seen = new Set();
+  const pts = [];
+  for (const id of schemLine.stations) {
+    const s = network.stations[id];
+    if (!s || s.lat == null || s.lon == null) continue;
+    const key = `${s.x},${s.y}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    pts.push(s);
+  }
+
+  if (pts.length === 0) return null;
+  if (pts.length === 1) return { x: pts[0].x, y: pts[0].y, bearing: 0 };
+
+  // Squared geographic distance (cosine-corrected longitude delta).
+  const cosLat = Math.cos(lat * Math.PI / 180);
+  function dist2(s) {
+    const dlat = s.lat - lat;
+    const dlon = (s.lon - lon) * cosLat;
+    return dlat * dlat + dlon * dlon;
+  }
+
+  pts.sort((a, b) => dist2(a) - dist2(b));
+  const A = pts[0], B = pts[1];
+
+  const dA = Math.sqrt(dist2(A)), dB = Math.sqrt(dist2(B));
+  const t = dA / (dA + dB);
+
+  const x = A.x + t * (B.x - A.x);
+  const y = A.y + t * (B.y - A.y);
+  const bearing = (Math.atan2(B.x - A.x, B.y - A.y) * 180 / Math.PI + 360) % 360;
+  return { x, y, bearing };
+}
+
 // Strategy: find the schematic line for this journey's Entur line ID, walk
 // the journey stops to locate the two curated schematic stops the train is
 // currently between, and interpolate by time.

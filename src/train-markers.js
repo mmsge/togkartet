@@ -1,5 +1,5 @@
 import { CONFIG } from './config.js';
-import { map, network, placeOnSchematic } from './schematic.js';
+import { map, network, placeOnSchematic, placeOnSchematicByGps } from './schematic.js';
 import { journeyCache, JOURNEY_CACHE_TTL, journeyFetchQueue, processJourneyFetchQueue, fetchJourney } from './journey.js';
 import { isLineRef } from './gtfs.js';
 import { openPanel, showSpinner, renderJourney, escHtml, setDetailContent } from './detail-panel.js';
@@ -57,6 +57,13 @@ export function updateMarkers(vehicles) {
     const cached = v.tripId && journeyCache.get(v.tripId);
     let placed = null;
     if (cached && cached.journey) placed = placeOnSchematic(cached.journey);
+
+    // GPS fallback: vehicles with a known route but no resolved journey
+    // (e.g. SJN trains that report position via SIRI-VM without a journey ref).
+    if (!placed && v.lat && v.lon && v.routeId && network) {
+      const schemLine = network.serviceLineIndex[v.routeId];
+      if (schemLine) placed = placeOnSchematicByGps(v.lat, v.lon, schemLine);
+    }
 
     if (placed) {
       placedCount++;
@@ -140,6 +147,19 @@ export async function onMarkerClick(id) {
   }
 
   const tripId = vehicleData.tripId || vehicleData.id;
+
+  // Vehicle has a line ref but no individual journey (e.g. GPS-only SJN trains).
+  if (!vehicleData.tripId && vehicleData.routeId && isLineRef(vehicleData.routeId)) {
+    const color = CONFIG.operatorColors[vehicleData.operatorCode] || CONFIG.operatorColors.DEFAULT;
+    const lineNum = vehicleData.routeId.split(':').pop();
+    setDetailContent(`
+      <div class="detail-header">
+        <span class="detail-line-badge" style="background:${color}">${escHtml(lineNum)}</span>
+        <span class="detail-line-name">${escHtml(vehicleData.operatorCode)}</span>
+      </div>
+      <div class="detail-meta">Kun posisjonsdata tilgjengelig — ingen rutedetaljer for dette toget.</div>`);
+    return;
+  }
 
   if (isLineRef(tripId)) {
     const color = CONFIG.operatorColors[vehicleData.operatorCode] || CONFIG.operatorColors.DEFAULT;

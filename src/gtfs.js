@@ -94,6 +94,44 @@ export async function fetchGtfsRt() {
   return vehicles;
 }
 
+// Parse a JSON SIRI-VM response body into vehicle objects.
+// When `knownTrain` is true the isTrain / VehicleMode filter is skipped —
+// used for targeted LineRef requests where we already know these are trains.
+function parseSiriVmJson(data, knownTrain = false) {
+  const activities = data?.Siri?.ServiceDelivery?.VehicleMonitoringDelivery?.[0]?.VehicleActivity || [];
+  const vehicles = [];
+  for (const act of activities) {
+    const mvj = act?.MonitoredVehicleJourney;
+    if (!mvj) continue;
+    if (mvj.VehicleMode && mvj.VehicleMode !== 'rail') continue;
+    const loc = mvj.VehicleLocation;
+    if (!loc) continue;
+    const lat = parseFloat(loc.Latitude);
+    const lon = parseFloat(loc.Longitude);
+    if (isNaN(lat) || isNaN(lon)) continue;
+    const journeyRef = mvj.FramedVehicleJourneyRef?.DatedVehicleJourneyRef || '';
+    const lineRef = mvj.LineRef?.value || mvj.LineRef || '';
+    // Prefer VehicleRef for unique identity when no journey ID is available.
+    const vehicleRef = mvj.VehicleRef?.value || mvj.VehicleRef || '';
+    const id = journeyRef || vehicleRef || lineRef || String(Math.random());
+    if (!knownTrain && !isTrain(id, journeyRef)) {
+      if (mvj.VehicleMode !== 'rail') continue;
+    }
+    vehicles.push({
+      id,
+      tripId: journeyRef,
+      routeId: lineRef,
+      lat,
+      lon,
+      bearing: parseFloat(mvj.Bearing || '0') || 0,
+      speed: 0,
+      operatorCode: operatorCodeFrom(journeyRef || lineRef),
+      timestamp: Date.now() / 1000,
+    });
+  }
+  return vehicles;
+}
+
 export async function fetchSiriVm() {
   const resp = await fetch(CONFIG.siriVmUrl + '?previewInterval=PT0S', {
     headers: {
@@ -104,79 +142,92 @@ export async function fetchSiriVm() {
   if (!resp.ok) throw new Error(`SIRI-VM HTTP ${resp.status}`);
 
   const ct = resp.headers.get('content-type') || '';
-  const vehicles = [];
 
   if (ct.includes('json')) {
     const data = await resp.json();
-    const activities = data?.Siri?.ServiceDelivery?.VehicleMonitoringDelivery?.[0]?.VehicleActivity || [];
-    for (const act of activities) {
-      const mvj = act?.MonitoredVehicleJourney;
-      if (!mvj) continue;
-      if (mvj.VehicleMode && mvj.VehicleMode !== 'rail') continue;
-      const loc = mvj.VehicleLocation;
-      if (!loc) continue;
-      const lat = parseFloat(loc.Latitude);
-      const lon = parseFloat(loc.Longitude);
-      if (isNaN(lat) || isNaN(lon)) continue;
-      const journeyRef = mvj.FramedVehicleJourneyRef?.DatedVehicleJourneyRef || '';
-      const lineRef = mvj.LineRef?.value || mvj.LineRef || '';
-      const id = journeyRef || lineRef || String(Math.random());
-      if (!isTrain(id, journeyRef)) {
-        if (mvj.VehicleMode !== 'rail') continue;
-      }
-      vehicles.push({
-        id,
-        tripId: journeyRef,
-        routeId: lineRef,
-        lat,
-        lon,
-        bearing: parseFloat(mvj.Bearing || '0') || 0,
-        speed: 0,
-        operatorCode: operatorCodeFrom(journeyRef || lineRef),
-        timestamp: Date.now() / 1000,
-      });
-    }
-  } else {
-    const text = await resp.text();
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(text, 'application/xml');
-    const activities = doc.querySelectorAll('VehicleActivity');
-    for (const act of activities) {
-      const mode = act.querySelector('VehicleMode')?.textContent?.trim();
-      if (mode && mode !== 'rail') continue;
-      const latEl = act.querySelector('VehicleLocation Latitude');
-      const lonEl = act.querySelector('VehicleLocation Longitude');
-      if (!latEl || !lonEl) continue;
-      const lat = parseFloat(latEl.textContent);
-      const lon = parseFloat(lonEl.textContent);
-      if (isNaN(lat) || isNaN(lon)) continue;
-      const journeyRef = act.querySelector('DatedVehicleJourneyRef')?.textContent?.trim() || '';
-      const lineRef = act.querySelector('LineRef')?.textContent?.trim() || '';
-      const bearing = parseFloat(act.querySelector('Bearing')?.textContent || '0') || 0;
-      const id = journeyRef || lineRef || String(Math.random());
-      vehicles.push({
-        id,
-        tripId: journeyRef,
-        routeId: lineRef,
-        lat,
-        lon,
-        bearing,
-        speed: 0,
-        operatorCode: operatorCodeFrom(journeyRef || lineRef),
-        timestamp: Date.now() / 1000,
-      });
-    }
+    return parseSiriVmJson(data, false);
+  }
+
+  // XML fallback
+  const text = await resp.text();
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(text, 'application/xml');
+  const activities = doc.querySelectorAll('VehicleActivity');
+  const vehicles = [];
+  for (const act of activities) {
+    const mode = act.querySelector('VehicleMode')?.textContent?.trim();
+    if (mode && mode !== 'rail') continue;
+    const latEl = act.querySelector('VehicleLocation Latitude');
+    const lonEl = act.querySelector('VehicleLocation Longitude');
+    if (!latEl || !lonEl) continue;
+    const lat = parseFloat(latEl.textContent);
+    const lon = parseFloat(lonEl.textContent);
+    if (isNaN(lat) || isNaN(lon)) continue;
+    const journeyRef = act.querySelector('DatedVehicleJourneyRef')?.textContent?.trim() || '';
+    const lineRef = act.querySelector('LineRef')?.textContent?.trim() || '';
+    const vehicleRef = act.querySelector('VehicleRef')?.textContent?.trim() || '';
+    const bearing = parseFloat(act.querySelector('Bearing')?.textContent || '0') || 0;
+    const id = journeyRef || vehicleRef || lineRef || String(Math.random());
+    vehicles.push({
+      id,
+      tripId: journeyRef,
+      routeId: lineRef,
+      lat,
+      lon,
+      bearing,
+      speed: 0,
+      operatorCode: operatorCodeFrom(journeyRef || lineRef),
+      timestamp: Date.now() / 1000,
+    });
   }
   return vehicles;
 }
 
+// Fetch vehicles for a single line via a targeted SIRI-VM LineRef query.
+// These trains are known to be rail, so the isTrain filter is bypassed.
+async function fetchSiriVmByLine(lineRef) {
+  try {
+    const resp = await fetch(
+      `${CONFIG.siriVmUrl}?previewInterval=PT0S&LineRef=${encodeURIComponent(lineRef)}`,
+      { headers: { 'Accept': 'application/json', 'ET-Client-Name': CONFIG.enturClientName } },
+    );
+    if (!resp.ok) return [];
+    const data = await resp.json();
+    return parseSiriVmJson(data, true);
+  } catch {
+    return [];
+  }
+}
+
 export async function fetchVehiclePositions() {
+  // Primary feed: GTFS-RT protobuf (covers VYG, GOA, FLT, …)
+  let mainVehicles;
   if (protoRoot) {
     try {
-      return await fetchGtfsRt();
+      mainVehicles = await fetchGtfsRt();
     } catch (e) {
       console.warn('GTFS-RT failed this cycle, falling back to SIRI-VM:', e.message);
+      mainVehicles = await fetchSiriVm();
+    }
+  } else {
+    mainVehicles = await fetchSiriVm();
+  }
+
+  // Supplementary: targeted per-line SIRI-VM requests for operators (e.g. SJN)
+  // whose vehicles fall outside the top-1000 unfiltered SIRI-VM result set.
+  const suppResults = await Promise.allSettled(
+    CONFIG.supplementaryLineRefs.map(lr => fetchSiriVmByLine(lr)),
+  );
+  const mainIds = new Set(mainVehicles.map(v => v.id));
+  for (const result of suppResults) {
+    if (result.status !== 'fulfilled') continue;
+    for (const v of result.value) {
+      if (!mainIds.has(v.id)) {
+        mainIds.add(v.id);
+        mainVehicles.push(v);
+      }
     }
   }
-  return fetchSiriVm();
+
+  return mainVehicles;
 }
