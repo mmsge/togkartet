@@ -91,7 +91,8 @@ Top-level keys:
 | Codespace | Operator | Primary lines |
 |-----------|----------|---------------|
 | VYG | Vy | Bergensbanen, Dovrebanen (partial), Kongsvingerbanen, Østfoldbanen, Gardermobanen, Randsfjordbanen |
-| SJN | SJ Nord | Nordlandsbanen, Dovrebanen (partial), Rørosbanen, Raumabanen, Meråkerbanen |
+| SJN | SJ Nord | Nordlandsbanen, Dovrebanen (partial), Rørosbanen, Raumabanen, Meråkerbanen, Trønderbanen |
+| SJV | SJ Sverige | Ofotbanen (Stockholm–Narvik night train) |
 | GOA | Go Ahead Nordic | Sørlandsbanen, Arendalsbanen, Vestfoldbanen, Jærbanen, Bratsbergbanen |
 | GJB | Gjøvikbanen AS | Gjøvikbanen (Oslo S–Gjøvik) |
 | FLT | FlixTrain | Budget intercity (seasonal) |

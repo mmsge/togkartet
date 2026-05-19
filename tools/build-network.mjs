@@ -38,8 +38,8 @@ const STATIONS = {
   Steinkjer:     { x: 38, y: -26, lat: 64.0157,   lon: 11.4998,   ids: ['NSR:StopPlace:714'],                                             bnCode: 'SK'   },
   Stjørdal:      { x: 38, y: -30, lat: 63.4719,   lon: 10.9249,   ids: ['NSR:StopPlace:712'],                                             bnCode: 'STD'  },
   Bodø:          { x: 39, y: -17, lat: 67.2851,   lon: 14.3879,   ids: ['NSR:StopPlace:507', 'NSR:StopPlace:510', 'NSR:StopPlace:58952'], bnCode: 'BO'   },
-  Narvik:        { x: 40, y: -12, lat: 68.44151,  lon: 17.441289, ids: ['NSR:StopPlace:62318'],                                           bnCode: 'NAR'  },
-  Kopperå:       { x: 40, y: -34, lat: 63.392005, lon: 11.847768, ids: ['NSR:StopPlace:62376'],                                           bnCode: null   },
+  Narvik:        { x: 40, y: -12, lat: 68.44151,  lon: 17.441289, ids: ['NSR:StopPlace:62318', 'NSR:StopPlace:58234'],                    bnCode: 'NAR'  },
+  Kopperå:       { x: 40, y: -34, lat: 63.392005, lon: 11.847768, ids: ['NSR:StopPlace:62376', 'NSR:StopPlace:592'],                     bnCode: null   },
   Hamar:         { x: 40, y: -59, lat: 60.7960,   lon: 11.0700,   ids: ['NSR:StopPlace:219'],                                             bnCode: 'HAM'  },
   'Oslo S':      { x: 40, y: -65, lat: 59.9111,   lon: 10.7557,   ids: ['NSR:StopPlace:337'],                                             bnCode: 'OS'   },
   Fauske:        { x: 41, y: -19, lat: 67.2599,   lon: 15.3927,   ids: ['NSR:StopPlace:176', 'NSR:StopPlace:182', 'NSR:StopPlace:58954'], bnCode: 'FK'   },
@@ -52,7 +52,7 @@ const STATIONS = {
   Arendal:       { x: 28, y: -75, lat: 58.4636,   lon: 8.7720,    ids: ['NSR:StopPlace:380'],                                             bnCode: 'ARD'  },
   Røros:         { x: 43, y: -47, lat: 62.5743,   lon: 11.3823,   ids: ['NSR:StopPlace:53'],                                              bnCode: 'RO'   },
   Ski:           { x: 43, y: -72, lat: 59.7197,   lon: 10.8358,   ids: ['NSR:StopPlace:127'],                                             bnCode: 'SKI'  },
-  Bjørnfjell:    { x: 45, y: -12, lat: 68.432799, lon: 18.070133, ids: ['NSR:StopPlace:62317'],                                           bnCode: null   },
+  Bjørnfjell:    { x: 45, y: -12, lat: 68.432799, lon: 18.070133, ids: ['NSR:StopPlace:62317', 'NSR:StopPlace:58576'],                    bnCode: null   },
   Elverum:       { x: 45, y: -54, lat: 60.8807,   lon: 11.5631,   ids: ['NSR:StopPlace:117'],                                             bnCode: 'ELV'  },
   Halden:        { x: 45, y: -77, lat: 59.1242,   lon: 11.3863,   ids: ['NSR:StopPlace:192'],                                             bnCode: 'HAL'  },
   Kongsvinger:   { x: 51, y: -61, lat: 60.1900,   lon: 11.9970,   ids: ['NSR:StopPlace:635'],                                             bnCode: 'KV'   },
@@ -160,7 +160,7 @@ const LINES = [
     name: 'Nordlandsbanen',
     color: '#2954ff',
     tier: 'trunk',
-    serviceLineIds: ['SJN:Line:71', 'SJN:Line:79'],
+    serviceLineIds: ['SJN:Line:71', 'SJN:Line:79', 'SJN:Line:26'],
     stops: ['Bodø', 'Fauske', 'Mo i Rana', 'Steinkjer', 'Stjørdal', 'Trondheim S'],
     polyline: [
       S('Bodø'), S('Fauske'), S('Mo i Rana'),
@@ -172,7 +172,7 @@ const LINES = [
     name: 'Ofotbanen',
     color: '#ff00d0',
     tier: 'trunk',
-    serviceLineIds: [],
+    serviceLineIds: ['SJV:Line:0ff9f2b9-fbe5-4761-8a29-8813be35efaa'],
     stops: ['Narvik', 'Bjørnfjell'],
     polyline: [S('Narvik'), S('Bjørnfjell')],
     dashed: [P(46, 12), P(52, 12)],
@@ -228,10 +228,12 @@ function build() {
   }
 
   const lines = LINES.map(ln => {
-    const stationIds = ln.stops.map(name => {
+    // Include ALL NSR alias IDs for each stop so placeOnSchematic can match
+    // journeys that use any of the alternative IDs for the same station.
+    const stationIds = ln.stops.flatMap(name => {
       const st = STATIONS[name];
       if (!st) throw new Error(`Line ${ln.id} references unknown station "${name}"`);
-      return st.ids[0];
+      return st.ids;
     });
     for (const name of ln.stops) {
       for (const id of STATIONS[name].ids) stations[id].lines.push(ln.id);

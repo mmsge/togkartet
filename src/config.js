@@ -4,10 +4,11 @@ export const CONFIG = {
   siriVmUrl: 'https://api.entur.io/realtime/v1/rest/vm',
   journeyPlannerUrl: 'https://api.entur.io/journey-planner/v3/graphql',
   updateIntervalMs: 15000,
-  trainCodespaces: ['VYG', 'SJN', 'GOA', 'GJB', 'FLT', 'RUT', 'NSB'],
+  trainCodespaces: ['VYG', 'SJN', 'SJV', 'GOA', 'GJB', 'FLT', 'RUT', 'NSB'],
   operatorColors: {
     VYG: '#e4032e',
     SJN: '#0e7dc2',
+    SJV: '#d8202f',
     GOA: '#00a651',
     GJB: '#8b4513',
     FLT: '#6a0dad',

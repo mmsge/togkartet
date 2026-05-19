@@ -42,7 +42,8 @@ Source: https://github.com/mmsge/togkartet
 ## Operators
 
 - **Vy** (codespace: VYG) — largest operator; Bergensbanen, Østfoldbanen, Kongsvingerbanen, Gardermobanen, commuter lines
-- **SJ Nord** (codespace: SJN) — Nordlandsbanen, Dovrebanen, Rørosbanen, Raumabanen, Meråkerbanen
+- **SJ Nord** (codespace: SJN) — Nordlandsbanen, Dovrebanen, Rørosbanen, Raumabanen, Meråkerbanen, Trønderbanen
+- **SJ Sverige** (codespace: SJV) — Ofotbanen (Stockholm–Narvik night train)
 - **Go Ahead Nordic** (codespace: GOA) — Sørlandsbanen, Arendalsbanen, Vestfoldbanen, Jærbanen
 - **Gjøvikbanen AS** (codespace: GJB) — Oslo–Gjøvik commuter service
 - **FlixTrain** (codespace: FLT) — budget intercity
