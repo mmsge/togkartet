@@ -5,6 +5,18 @@ export const CONFIG = {
   journeyPlannerUrl: 'https://api.entur.io/journey-planner/v3/graphql',
   updateIntervalMs: 15000,
   trainCodespaces: ['VYG', 'SJN', 'SJV', 'GOA', 'GJB', 'FLT', 'RUT', 'NSB'],
+  // Lines absent from the GTFS-RT vehicle-positions feed that need targeted
+  // SIRI-VM LineRef requests to surface their trains.
+  supplementaryLineRefs: [
+    'SJN:Line:21',  // Dovrebanen (SJN)
+    'SJN:Line:22',  // Raumabanen
+    'SJN:Line:25',  // Rørosbanen
+    'SJN:Line:26',  // Trønderbanen
+    'SJN:Line:71',  // Nordlandsbanen
+    'SJN:Line:72',  // Meråkerbanen
+    'SJN:Line:79',  // Saltenpendelen
+    'VYG:Line:R45', // Flåmsbana
+  ],
   operatorColors: {
     VYG: '#e4032e',
     SJN: '#0e7dc2',
